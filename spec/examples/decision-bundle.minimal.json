@@ -1,0 +1,124 @@
+{
+  "decisionId": "dec_demo_001",
+  "certificateLevel": "CERTIFICATE_LEVEL_FEASIBLE",
+  "decisionStatus": "DECISION_STATUS_FEASIBLE",
+  "snapshotRef": {
+    "snapshotId": "snap_demo_001",
+    "snapshotHash": "sha256:demo-snapshot",
+    "modelHash": "sha256:model-v1",
+    "policyHash": "sha256:policy-default",
+    "solverConfigHash": "sha256:fast-path-config",
+    "snapshotTime": "2026-03-15T00:00:00Z"
+  },
+  "tasks": [
+    {
+      "taskId": "task_train_001",
+      "kind": "TASK_KIND_TRAINING",
+      "priority": 100,
+      "urgency": 0.92,
+      "demand": {
+        "cpuCores": 16,
+        "memoryGib": 64,
+        "gpuCount": 4,
+        "gpuMemoryGib": 320,
+        "acceleratorType": "A100"
+      },
+      "training": {
+        "gangSize": 4,
+        "minReplicas": 4,
+        "maxReplicas": 4,
+        "allowedAccelerators": [
+          "A100"
+        ],
+        "maxBudgetUsdPerHour": 14,
+        "maxCarbonGco2PerHour": 4000
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "candidateId": "cand_001",
+      "taskId": "task_train_001",
+      "nodeIds": [
+        "node-a",
+        "node-b",
+        "node-c",
+        "node-d"
+      ],
+      "clusterId": "cluster-west",
+      "region": "us-west1",
+      "expectedCostUsdPerHour": 12.4,
+      "expectedCarbonGco2PerHour": 3150,
+      "expectedP95LatencyMs": 0,
+      "interruptionRisk": 0.03,
+      "topologyScore": 0.88,
+      "objectiveTerms": [
+        {
+          "name": "urgency",
+          "rawValue": 0.92,
+          "normalizedValue": 0.92,
+          "weight": 1,
+          "contribution": 0.92
+        }
+      ]
+    }
+  ],
+  "assignments": [
+    {
+      "assignmentId": "asg_001",
+      "taskId": "task_train_001",
+      "nodeIds": [
+        "node-a",
+        "node-b",
+        "node-c",
+        "node-d"
+      ],
+      "clusterId": "cluster-west",
+      "region": "us-west1",
+      "assignedQps": 0,
+      "assignedReplicas": 4,
+      "expectedCostUsdPerHour": 12.4,
+      "expectedCarbonGco2PerHour": 3150,
+      "expectedP95LatencyMs": 0,
+      "interruptionRisk": 0.03,
+      "objectiveTerms": [
+        {
+          "name": "urgency",
+          "rawValue": 0.92,
+          "normalizedValue": 0.92,
+          "weight": 1,
+          "contribution": 0.92
+        }
+      ]
+    }
+  ],
+  "constraintEvals": [
+    {
+      "constraintId": "resource_gpu_count",
+      "kind": "CONSTRAINT_KIND_RESOURCE",
+      "subjectId": "asg_001",
+      "expression": "sum(gpu_count)<=capacity",
+      "lhs": 4,
+      "op": "REL_OP_LE",
+      "rhs": 4,
+      "slack": 0,
+      "satisfied": true,
+      "explanation": "training gang fits exactly",
+      "relatedIds": [
+        "task_train_001",
+        "node-a",
+        "node-b",
+        "node-c",
+        "node-d"
+      ]
+    }
+  ],
+  "fallback": {
+    "code": "FALLBACK_CODE_NONE",
+    "message": "fast path selected the first feasible candidate"
+  },
+  "bundleHash": "sha256:demo-bundle",
+  "signerKeyId": "local-dev-key",
+  "signature": "ZGVtby1zaWduYXR1cmU=",
+  "createdAt": "2026-03-15T00:00:02Z"
+}

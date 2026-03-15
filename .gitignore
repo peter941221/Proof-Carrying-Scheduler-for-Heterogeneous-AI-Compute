@@ -1,0 +1,12 @@
+# Local-only coordination and planning files for the public GitHub repo
+AGENTS.md
+MEMORY.md
+RUNBOOK.md
+proof_plan.txt
+tech_plan.txt
+docs/coordination/
+api/AGENTS.md
+spec/AGENTS.md
+internal/**/AGENTS.md
+verifier/AGENTS.md
+proofs/AGENTS.md

@@ -1,0 +1,27 @@
+# Contract Packet
+
+## Frozen surfaces
+
+- `api/proto/pcs/v1/scheduler.proto`
+- `spec/decision-bundle.md`
+- `spec/canonical-json.md`
+- `spec/claim-taxonomy.md`
+
+## Commander gate
+
+Any change to these surfaces requires commander review before module implementation continues:
+
+- protobuf fields, enum values, RPC names, or package paths
+- canonical serialization order and hash inputs
+- signature envelope fields
+- certificate level semantics
+- verification issue codes and trust-boundary wording
+
+## Initial freeze goal
+
+The first freeze establishes:
+
+- `DecisionBundle` as the evidence source of truth
+- snapshot, model, policy, and solver config hash references
+- deterministic score and constraint witness payloads
+- verifier input/output contracts that remain stable while modules iterate
