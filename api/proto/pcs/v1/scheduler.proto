@@ -68,6 +68,23 @@ enum CertificateLevel {
   CERTIFICATE_LEVEL_SHADOW = 5;
 }
 
+enum IssueSeverity {
+  ISSUE_SEVERITY_UNSPECIFIED = 0;
+  ISSUE_SEVERITY_INFO = 1;
+  ISSUE_SEVERITY_WARNING = 2;
+  ISSUE_SEVERITY_ERROR = 3;
+  ISSUE_SEVERITY_CRITICAL = 4;
+}
+
+enum ClaimStatus {
+  CLAIM_STATUS_UNSPECIFIED = 0;
+  CLAIM_STATUS_PLANNED = 1;
+  CLAIM_STATUS_MODELED = 2;
+  CLAIM_STATUS_CHECKED = 3;
+  CLAIM_STATUS_IMPLEMENTED = 4;
+  CLAIM_STATUS_VERIFIED = 5;
+}
+
 message ResourceVector {
   double cpu_cores = 1;
   double memory_gib = 2;
@@ -236,6 +253,16 @@ message SnapshotRef {
   google.protobuf.Timestamp snapshot_time = 6;
 }
 
+message SnapshotMetadata {
+  string snapshot_id = 1;
+  string snapshot_hash = 2;
+  int64 version = 3;
+  google.protobuf.Timestamp snapshot_time = 4;
+  repeated Node nodes = 5;
+  repeated NetworkEdge network_edges = 6;
+  map<string, string> labels = 7;
+}
+
 message DecisionBundle {
   string decision_id = 1;
   CertificateLevel certificate_level = 2;
@@ -267,8 +294,15 @@ message VerifyRequest {
 message VerificationIssue {
   string code = 1;
   string message = 2;
-  string severity = 3;
+  IssueSeverity severity = 3;
   repeated string related_ids = 4;
+}
+
+message ClaimCheck {
+  string claim_id = 1;
+  ClaimStatus status = 2;
+  repeated string artifact_refs = 3;
+  string summary = 4;
 }
 
 message VerifyResponse {
@@ -279,6 +313,7 @@ message VerifyResponse {
   bool counterfactuals_valid = 5;
   repeated VerificationIssue issues = 6;
   double verification_time_ms = 7;
+  repeated ClaimCheck checked_claims = 8;
 }
 
 message ScheduleBatchRequest {
