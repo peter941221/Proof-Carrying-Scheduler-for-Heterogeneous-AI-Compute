@@ -6,7 +6,7 @@
 
 ## Summary
 
-This worktree completed the State mission: it now includes an implementation-ready snapshot assembly guide, deterministic fixtures, and small local tools for hash and fail-fast verification.
+This worktree completed the State mission: it now includes an implementation-ready snapshot assembly guide, deterministic fixtures, and small local tools for hash and fail-fast verification. Generated Python bytecode was removed from source control and is now ignored inside the module scope.
 
 ## Files changed / added (owned scope only)
 
@@ -14,6 +14,7 @@ This worktree completed the State mission: it now includes an implementation-rea
 internal/state/
 ├─ README.md
 ├─ HANDOFF.md
+├─ .gitignore
 ├─ fixtures/
 │  ├─ README.md
 │  ├─ mixed_cpu_gpu.v1.snapshot.json
