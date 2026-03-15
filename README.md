@@ -31,6 +31,13 @@ This repo is prepared for a commander-and-worktrees workflow:
 - verifier and proof work stay separate from the scheduler hot path
 - local-only coordination docs are intentionally ignored because the intended GitHub repo is public
 
+## Documentation layering
+
+- `README.md` explains the repo-wide model and worktree workflow
+- `api/README.md` and `spec/README.md` define the shared contract layer
+- each implementation module has its own local README so a module worktree feels like a small project root
+- shared semantics still have one source of truth; module READMEs summarize and point back to the root contracts instead of redefining them
+
 ## Local bootstrap
 
 Use the PowerShell helpers to bootstrap a fresh local clone or recreate the multi-worktree setup:
