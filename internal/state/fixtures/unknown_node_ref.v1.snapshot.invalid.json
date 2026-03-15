@@ -1,0 +1,40 @@
+{
+  "labels": {
+    "env": "dev"
+  },
+  "networkEdges": [
+    {
+      "dstId": "node-does-not-exist",
+      "p50LatencyMs": 1.2,
+      "p95LatencyMs": 3.4,
+      "srcId": "node-cpu-a"
+    }
+  ],
+  "nodes": [
+    {
+      "capacityFree": {
+        "acceleratorType": "",
+        "cpuCores": 8,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 32
+      },
+      "capacityTotal": {
+        "acceleratorType": "",
+        "cpuCores": 8,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 32
+      },
+      "clusterId": "cluster-west",
+      "nodeId": "node-cpu-a",
+      "region": "us-west1",
+      "spot": false,
+      "zone": "us-west1-a"
+    }
+  ],
+  "snapshotId": "snap_unknown_node_ref_v1",
+  "snapshotTime": "2026-03-15T00:00:00Z",
+  "version": 1
+}
+

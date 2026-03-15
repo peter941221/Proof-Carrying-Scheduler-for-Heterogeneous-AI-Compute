@@ -1,0 +1,125 @@
+{
+  "labels": {
+    "env": "dev",
+    "policyTier": "default",
+    "topology": "multi-zone"
+  },
+  "networkEdges": [
+    {
+      "dstId": "node-west-a",
+      "jitterMs": 0.08,
+      "lossRate": 0,
+      "p50LatencyMs": 0.22,
+      "p95LatencyMs": 0.6,
+      "srcId": "node-west-b"
+    },
+    {
+      "dstId": "node-east-a",
+      "jitterMs": 1.4,
+      "lossRate": 0.0001,
+      "p50LatencyMs": 58.2,
+      "p95LatencyMs": 72.5,
+      "srcId": "node-west-a"
+    }
+  ],
+  "nodes": [
+    {
+      "capacityFree": {
+        "acceleratorType": "",
+        "cpuCores": 48,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 192,
+        "netMbps": 25000,
+        "storageGib": 6000
+      },
+      "capacityTotal": {
+        "acceleratorType": "",
+        "cpuCores": 48,
+        "ext": {
+          "ioReadMbs": 1200,
+          "ioWriteMbs": 900
+        },
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 192,
+        "netMbps": 25000,
+        "storageGib": 6000
+      },
+      "clusterId": "cluster-west",
+      "labels": {
+        "arch": "x86_64",
+        "role": "cpu",
+        "sku": "c2-standard"
+      },
+      "nodeId": "node-west-a",
+      "region": "us-west1",
+      "spot": false,
+      "zone": "us-west1-a"
+    },
+    {
+      "capacityFree": {
+        "acceleratorType": "",
+        "cpuCores": 48,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 192,
+        "netMbps": 25000,
+        "storageGib": 6000
+      },
+      "capacityTotal": {
+        "acceleratorType": "",
+        "cpuCores": 48,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 192,
+        "netMbps": 25000,
+        "storageGib": 6000
+      },
+      "clusterId": "cluster-west",
+      "labels": {
+        "arch": "x86_64",
+        "role": "cpu",
+        "sku": "c2-standard"
+      },
+      "nodeId": "node-west-b",
+      "region": "us-west1",
+      "spot": false,
+      "zone": "us-west1-b"
+    },
+    {
+      "capacityFree": {
+        "acceleratorType": "T4",
+        "cpuCores": 32,
+        "gpuCount": 1,
+        "gpuMemoryGib": 16,
+        "memoryGib": 128,
+        "netMbps": 10000,
+        "storageGib": 3000
+      },
+      "capacityTotal": {
+        "acceleratorType": "T4",
+        "cpuCores": 32,
+        "gpuCount": 1,
+        "gpuMemoryGib": 16,
+        "memoryGib": 128,
+        "netMbps": 10000,
+        "storageGib": 3000
+      },
+      "clusterId": "cluster-east",
+      "labels": {
+        "arch": "x86_64",
+        "role": "gpu",
+        "sku": "g2-standard"
+      },
+      "nodeId": "node-east-a",
+      "region": "us-east1",
+      "spot": true,
+      "zone": "us-east1-a"
+    }
+  ],
+  "snapshotHash": "sha256:abafa8b632b2dafc96b538266599cbf10dddae6976d8272fbc6a4684ebb875e0",
+  "snapshotId": "snap_topology_multi_zone_v1",
+  "snapshotTime": "2026-03-15T00:00:00Z",
+  "version": 1
+}
