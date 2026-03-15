@@ -38,6 +38,13 @@ This repo is prepared for a commander-and-worktrees workflow:
 - each implementation module has its own local README so a module worktree feels like a small project root
 - shared semantics still have one source of truth; module READMEs summarize and point back to the root contracts instead of redefining them
 
+## Task and handoff flow
+
+- each public module directory contains a `TASK.md` with the full current mission for that module
+- each module also contains a `HANDOFF.md` that the worker fills in before asking for review
+- workers should complete the whole `TASK.md` in one pass when feasible, then stop and submit the filled `HANDOFF.md`
+- the commander reviews handoffs, accepts, or issues targeted rework
+
 ## Local bootstrap
 
 Use the PowerShell helpers to bootstrap a fresh local clone or recreate the multi-worktree setup:
