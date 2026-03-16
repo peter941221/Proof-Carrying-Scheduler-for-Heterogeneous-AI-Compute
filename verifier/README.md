@@ -33,3 +33,10 @@ This module independently checks scheduler evidence without trusting the schedul
 - define the verification stage order
 - map each issue family to concrete failure cases
 - make claim reporting explicit instead of implied
+
+## Working docs (v0)
+
+- stage order and flag semantics: `verification-stages.md`
+- issue code catalog: `issue-codes.md`
+- checked-claim reporting policy: `claim-reporting.md`
+- claim-to-stage matrix: `claim-matrix.md`

@@ -40,4 +40,5 @@ The `snapshot_hash` excludes:
 ## Relation to `DecisionBundle`
 
 - a bundle binds to one snapshot through `snapshot_ref.snapshot_hash`
+- `snapshot_ref.snapshot_version` must match the snapshot payload `version`
 - the verifier may require the snapshot payload out of band, but the hash and metadata must match exactly

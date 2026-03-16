@@ -61,7 +61,18 @@ function Assert-FileExists {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\\..")).Path
-$worktreeBase = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $WorktreeRoot))
+$commonGitDirRaw = (& git -C $repoRoot rev-parse --git-common-dir 2>$null)
+if ($LASTEXITCODE -ne 0 -or -not $commonGitDirRaw) {
+    throw "Unable to resolve git common dir for $repoRoot"
+}
+$commonGitDirText = "$commonGitDirRaw".Trim()
+if ([System.IO.Path]::IsPathRooted($commonGitDirText)) {
+    $commonGitDir = [System.IO.Path]::GetFullPath($commonGitDirText)
+} else {
+    $commonGitDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $commonGitDirText))
+}
+$commonRepoRoot = Split-Path -Parent $commonGitDir
+$worktreeBase = [System.IO.Path]::GetFullPath((Join-Path $commonRepoRoot $WorktreeRoot))
 
 $modules = @(
     @{

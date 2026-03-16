@@ -8,10 +8,13 @@
 
 - one `decision_id` identifies exactly one bundle
 - `snapshot_ref.snapshot_hash` binds the decision to one snapshot
-- `tasks`, `candidates`, and `assignments` are included together for independent replay
-- every `constraint_eval.subject_id` points at a task, candidate, assignment, or system-wide subject present in the bundle
+- `snapshot_ref.snapshot_version` must match the out-of-band snapshot payload `version`
+- `tasks` and `assignments` are present together for independent replay
+- if any `constraint_evals[].subject_id` references a task, candidate, or assignment ID, that object must be present in the bundle
 - `bundle_hash` is computed from the canonical JSON payload before signing
-- `prev_bundle_hash` links the bundle into an append-only chain when a previous bundle exists
+- `prev_bundle_hash` links the bundle into an append-only chain when a previous bundle exists (omit the field when no predecessor exists)
+- `fallback.code` must be present; use `FALLBACK_CODE_NONE` when no fallback occurred
+- `signer_key_id` must identify the signing key or policy used to produce `signature`
 
 ## Minimum fields by certificate level
 
@@ -24,6 +27,7 @@
 - `tasks`
 - `assignments`
 - `constraint_evals`
+- `fallback`
 - `bundle_hash`
 - `signer_key_id`
 - `signature`
@@ -40,7 +44,7 @@ Includes feasible fields plus:
 Includes feasible fields plus:
 
 - failed `constraint_evals`
-- `fallback` if the scheduler degraded or exited early
+- `fallback.code != FALLBACK_CODE_NONE` if the scheduler degraded or exited early
 
 ### Counterfactual
 
@@ -51,6 +55,12 @@ Includes bounded or feasible fields plus:
 ### Shadow
 
 Includes feasible fields and comparative objective terms needed by replay or shadow analysis.
+
+## Decision status semantics
+
+- `DECISION_STATUS_FEASIBLE`: all declared hard constraints are satisfied for the chosen assignments.
+- `DECISION_STATUS_PARTIAL`: the scheduler produced a degraded decision (e.g., partial placement or relaxed objective) and records the reason in `fallback` plus any failing constraint evaluations.
+- `DECISION_STATUS_INFEASIBLE`: no feasible placement was found; `assignments` may be empty and `constraint_evals` must expose the infeasibility evidence.
 
 ## Verification contract
 

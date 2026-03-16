@@ -1,0 +1,90 @@
+{
+  "labels": {
+    "env": "dev",
+    "policyTier": "default"
+  },
+  "networkEdges": [
+    {
+      "dstId": "node-gpu-a",
+      "jitterMs": 0.12,
+      "lossRate": 0,
+      "p50LatencyMs": 0.35,
+      "p95LatencyMs": 0.9,
+      "srcId": "node-cpu-a"
+    }
+  ],
+  "nodes": [
+    {
+      "capacityFree": {
+        "acceleratorType": "",
+        "cpuCores": 96,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 384,
+        "netMbps": 25000,
+        "storageGib": 8000
+      },
+      "capacityTotal": {
+        "acceleratorType": "",
+        "cpuCores": 96,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 384,
+        "netMbps": 25000,
+        "storageGib": 8000
+      },
+      "clusterId": "cluster-west",
+      "cpuHourCostUsd": 0.62,
+      "faultDomain": "fd-1",
+      "gpuHourCostUsd": 0,
+      "healthScore": 0.99,
+      "interruptionProb": 0.01,
+      "labels": {
+        "arch": "x86_64",
+        "role": "cpu"
+      },
+      "nodeId": "node-cpu-a",
+      "region": "us-west1",
+      "spot": false,
+      "zone": "us-west1-a"
+    },
+    {
+      "capacityFree": {
+        "acceleratorType": "A100",
+        "cpuCores": 80,
+        "gpuCount": 8,
+        "gpuMemoryGib": 640,
+        "memoryGib": 1024,
+        "netMbps": 100000,
+        "storageGib": 12000
+      },
+      "capacityTotal": {
+        "acceleratorType": "A100",
+        "cpuCores": 80,
+        "gpuCount": 8,
+        "gpuMemoryGib": 640,
+        "memoryGib": 1024,
+        "netMbps": 100000,
+        "storageGib": 12000
+      },
+      "clusterId": "cluster-west",
+      "cpuHourCostUsd": 0.55,
+      "faultDomain": "fd-1",
+      "gpuHourCostUsd": 3.1,
+      "healthScore": 0.98,
+      "interruptionProb": 0.03,
+      "labels": {
+        "arch": "x86_64",
+        "role": "gpu"
+      },
+      "nodeId": "node-gpu-a",
+      "region": "us-west1",
+      "spot": true,
+      "zone": "us-west1-a"
+    }
+  ],
+  "snapshotHash": "sha256:c2a188f10daeaa5f3b81af56e0f7f5f35d9d73961c723dad248d77b68ebc0842",
+  "snapshotId": "snap_mixed_cpu_gpu_v1",
+  "snapshotTime": "2026-03-15T00:00:00Z",
+  "version": 1
+}

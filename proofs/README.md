@@ -32,3 +32,10 @@ This module holds formal and semi-formal assurance artifacts that justify projec
 - choose the smallest week-1 TLA+ scope
 - map initial claim IDs to artifacts or explicit placeholders
 - keep proof scope narrow enough that implementation can proceed in parallel
+
+## Working docs (v0)
+
+- scope choice: `week-1-scope.md`
+- claim ↔ artifact mapping: `claim-traceability.md`
+- TLA+ artifacts: `tla+/README.md`
+- model assumptions: `tla+/ASSUMPTIONS.md`

@@ -5,6 +5,7 @@
   "snapshotRef": {
     "snapshotId": "snap_demo_001",
     "snapshotHash": "sha256:demo-snapshot",
+    "snapshotVersion": 1,
     "modelHash": "sha256:model-v1",
     "policyHash": "sha256:policy-default",
     "solverConfigHash": "sha256:fast-path-config",

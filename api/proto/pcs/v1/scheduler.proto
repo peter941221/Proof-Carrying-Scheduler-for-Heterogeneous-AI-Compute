@@ -7,6 +7,17 @@ option go_package = "github.com/peter941221/Proof-Carrying-Scheduler-for-Heterog
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
+// This file defines the public wire contract for the PCS scheduler and verifier.
+//
+// Normative semantics for hashing, signing, and verification are defined in:
+// - spec/decision-bundle.md
+// - spec/canonical-json.md
+// - spec/snapshot-contract.md
+// - spec/verification-report.md
+//
+// Interop rule: comments in this file are part of the public contract when they
+// constrain hashing/signature inputs, verification behavior, or replay semantics.
+
 enum TaskKind {
   TASK_KIND_UNSPECIFIED = 0;
   TASK_KIND_TRAINING = 1;
@@ -61,10 +72,15 @@ enum FallbackCode {
 
 enum CertificateLevel {
   CERTIFICATE_LEVEL_UNSPECIFIED = 0;
+  // Bundle contains enough evidence to justify a feasible placement.
   CERTIFICATE_LEVEL_FEASIBLE = 1;
+  // Bundle includes an optimization bound witness (e.g. incumbent/best bound).
   CERTIFICATE_LEVEL_BOUNDED = 2;
+  // Bundle records a concrete conflict or infeasibility witness.
   CERTIFICATE_LEVEL_CONFLICT = 3;
+  // Bundle includes counterfactual scenarios used to justify trade-offs.
   CERTIFICATE_LEVEL_COUNTERFACTUAL = 4;
+  // Bundle is produced for shadow-mode comparison and may not be executed.
   CERTIFICATE_LEVEL_SHADOW = 5;
 }
 
@@ -78,14 +94,20 @@ enum IssueSeverity {
 
 enum ClaimStatus {
   CLAIM_STATUS_UNSPECIFIED = 0;
+  // The claim exists in scope but has no supporting artifact yet.
   CLAIM_STATUS_PLANNED = 1;
+  // The claim is represented in specs or an explicit model, but not exercised.
   CLAIM_STATUS_MODELED = 2;
+  // The claim is exercised by a checker/verifier/replay/test harness.
   CLAIM_STATUS_CHECKED = 3;
+  // The product behavior exists in code, but independent verification may lag.
   CLAIM_STATUS_IMPLEMENTED = 4;
+  // A durable artifact exists that justifies the claim at the stated boundary.
   CLAIM_STATUS_VERIFIED = 5;
 }
 
 message ResourceVector {
+  // Standard capacity/usage dimensions. Units are declared in field names.
   double cpu_cores = 1;
   double memory_gib = 2;
   double gpu_count = 3;
@@ -94,6 +116,7 @@ message ResourceVector {
   double net_mbps = 6;
   double power_watts = 7;
   string accelerator_type = 8;
+  // Extensible dimensions. Keys must be stable, public identifiers (e.g. "hbm_gib").
   map<string, double> ext = 9;
 }
 
@@ -168,10 +191,15 @@ message Task {
 }
 
 message ObjectiveTerm {
+  // Stable name for the term (e.g. "cost", "carbon", "urgency").
   string name = 1;
+  // Raw value in the producer's native units; used for explanation and replay.
   double raw_value = 2;
+  // Normalized value used inside the objective aggregation for this decision.
   double normalized_value = 3;
+  // Weight used for this decision; interpretation is objective-term-specific.
   double weight = 4;
+  // Contribution of this term to the aggregated objective (post-normalization).
   double contribution = 5;
 }
 
@@ -205,31 +233,43 @@ message Assignment {
 }
 
 message ConstraintEval {
+  // Stable constraint identifier. Prefer IDs that can be matched across runs.
   string constraint_id = 1;
   ConstraintKind kind = 2;
+  // ID of the primary object this evaluation attaches to (task/candidate/assignment),
+  // or a system-wide subject ID (e.g. "system") when no single object applies.
   string subject_id = 3;
+  // Human-readable expression string. It is not interpreted by the verifier unless
+  // a module-defined semantics is specified elsewhere.
   string expression = 4;
+  // Witness values for the evaluated predicate.
   double lhs = 5;
   RelOp op = 6;
   double rhs = 7;
+  // Signed slack in the units implied by lhs/rhs (positive slack implies satisfied for <=).
   double slack = 8;
   bool satisfied = 9;
   string explanation = 10;
+  // Additional IDs to help pinpoint evidence (task IDs, node IDs, etc.).
   repeated string related_ids = 11;
 }
 
 message BoundCertificate {
   SolverKind solver = 1;
+  // Solver-specific status string (e.g. "OPTIMAL", "TIME_LIMIT").
   string status = 2;
   double incumbent_objective = 3;
   double best_bound = 4;
+  // (incumbent - best_bound) / max(|incumbent|, eps), when meaningful for solver kind.
   double relative_gap = 5;
   double solve_time_ms = 6;
   bool timed_out = 7;
+  // Hash of the solver log (or equivalent trace) stored out of band.
   string solver_log_hash = 8;
 }
 
 message FallbackReason {
+  // Must be present; use FALLBACK_CODE_NONE when no fallback occurred.
   FallbackCode code = 1;
   string message = 2;
   repeated string related_constraints = 3;
@@ -238,6 +278,8 @@ message FallbackReason {
 message Counterfactual {
   string counterfactual_id = 1;
   string title = 2;
+  // Opaque structured delta describing how this scenario differs from the executed decision.
+  // Consumers must not assume a particular patch/merge semantics unless documented elsewhere.
   google.protobuf.Struct delta = 3;
   bool feasible = 4;
   double expected_objective = 5;
@@ -245,11 +287,20 @@ message Counterfactual {
 }
 
 message SnapshotRef {
+  // Human-stable identifier for the snapshot payload presented out-of-band to the verifier.
   string snapshot_id = 1;
+  // Hash of the canonical, normalized snapshot payload. Representation is an opaque string,
+  // but producers should prefer an algorithm-prefixed digest (e.g. "sha256:<hex>").
   string snapshot_hash = 2;
+  // Snapshot payload schema/version used when producing snapshot_hash.
+  // This must match the out-of-band snapshot payload presented to the verifier.
+  int64 snapshot_version = 7;
+  // Hash references for the model/policy/config used to produce candidates and constraints.
+  // These values are verifier-facing provenance hooks and should be stable across modules.
   string model_hash = 3;
   string policy_hash = 4;
   string solver_config_hash = 5;
+  // Logical time the snapshot represents (not necessarily wall-clock ingest time).
   google.protobuf.Timestamp snapshot_time = 6;
 }
 
@@ -264,61 +315,96 @@ message SnapshotMetadata {
 }
 
 message DecisionBundle {
+  // decision_id identifies exactly one evidence bundle.
   string decision_id = 1;
+  // certificate_level describes the evidence richness included in this bundle.
   CertificateLevel certificate_level = 2;
+  // decision_status captures the scheduler's high-level outcome; see spec/decision-bundle.md.
   DecisionStatus decision_status = 3;
+  // Snapshot binding and provenance hooks required for independent replay/verification.
   SnapshotRef snapshot_ref = 4;
+  // Full task inputs necessary for replay.
   repeated Task tasks = 5;
+  // Optional candidate set included when needed for replay/explanation/shadow analysis.
   repeated Candidate candidates = 6;
+  // Executed assignment set (may be empty for infeasible decisions).
   repeated Assignment assignments = 7;
+  // Constraint witness payloads used by the verifier to justify feasibility/infeasibility.
   repeated ConstraintEval constraint_evals = 8;
+  // Optional optimization bound witness (required for CERTIFICATE_LEVEL_BOUNDED).
   BoundCertificate bound = 9;
+  // Must be present; use FALLBACK_CODE_NONE when no fallback occurred.
   FallbackReason fallback = 10;
+  // Optional counterfactual scenarios used to justify trade-offs.
   repeated Counterfactual counterfactuals = 11;
+  // Previous bundle hash for append-only chaining. Omit when no predecessor exists.
   string prev_bundle_hash = 12;
+  // bundle_hash is computed over the canonical JSON form of DecisionBundle with:
+  // - bundle_hash omitted
+  // - signature omitted
   string bundle_hash = 13;
+  // signer_key_id identifies which key (or policy) produced signature.
   string signer_key_id = 14;
+  // signature covers bundle_hash or the canonical bytes, as defined by the signer policy.
   bytes signature = 15;
+  // Timestamp when this bundle was finalized for hashing/signing.
   google.protobuf.Timestamp created_at = 16;
 }
 
 message VerifyRequest {
   DecisionBundle bundle = 1;
+  // Toggles allow callers to skip checks; see spec/verification-report.md for required reporting.
   bool verify_signature = 2;
   bool verify_constraints = 3;
   bool verify_bound = 4;
   bool verify_counterfactuals = 5;
+  // strict_mode upgrades skipped checks to errors and forces valid=false.
   bool strict_mode = 6;
 }
 
 message VerificationIssue {
+  // Stable machine-readable identifier (e.g. "STRUCT.MISSING_FIELD").
+  // See spec/verification-report.md for code family conventions.
   string code = 1;
+  // Human-readable explanation. Must not be required for machine processing.
   string message = 2;
   IssueSeverity severity = 3;
+  // IDs that let clients locate the failing object(s), such as:
+  // - decision_id / snapshot_id
+  // - task_id / assignment_id / constraint_id
   repeated string related_ids = 4;
 }
 
 message ClaimCheck {
   string claim_id = 1;
+  // ClaimStatus indicates the strongest achieved lifecycle status supported by evidence.
   ClaimStatus status = 2;
+  // Opaque references to supporting artifacts (proof IDs, report hashes, log digests, etc.).
   repeated string artifact_refs = 3;
+  // Short human-readable summary of what was checked and at what boundary.
   string summary = 4;
 }
 
 message VerifyResponse {
+  // Overall validity. See spec/verification-report.md for required consistency rules.
   bool valid = 1;
   bool signature_valid = 2;
   bool constraints_valid = 3;
   bool bound_valid = 4;
   bool counterfactuals_valid = 5;
+  // Every failed (or skipped, when relevant) check must be surfaced as at least one issue.
   repeated VerificationIssue issues = 6;
   double verification_time_ms = 7;
+  // Claims actually exercised during verification; see spec/claim-taxonomy.md.
   repeated ClaimCheck checked_claims = 8;
 }
 
 message ScheduleBatchRequest {
   repeated Task tasks = 1;
+  // Optional hint for which snapshot to schedule against. The returned DecisionBundle.snapshot_ref
+  // always identifies the snapshot actually used for the decision.
   SnapshotRef preferred_snapshot = 2;
+  // Opaque scheduler options (non-normative unless explicitly documented elsewhere).
   google.protobuf.Struct options = 3;
 }
 
