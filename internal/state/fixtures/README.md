@@ -32,6 +32,20 @@ Fixtures in this directory are intentionally small, deterministic examples for s
 - computed hashes match canonical JSON rules with `snapshotHash` stripped
 - invalid fixtures fail validation
 
+## Normalize a draft fixture
+
+Use the local normalizer before computing or updating `snapshotHash`:
+
+```powershell
+python internal/state/tools/normalize_snapshot.py --in draft.snapshot.json --out normalized.snapshot.json
+```
+
+The normalizer:
+
+- drops `null` object fields
+- sorts `nodes[]` by `clusterId`, `region`, `zone`, `nodeId`
+- sorts `networkEdges[]` by `srcId`, `dstId`
+
 ## Verify locally
 
 From the repo root:

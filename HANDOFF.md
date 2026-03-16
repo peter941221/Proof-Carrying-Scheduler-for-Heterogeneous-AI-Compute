@@ -14,6 +14,6 @@ This worktree runs the **State** mission.
 ## Latest round
 
 - Status: ready
-- Scope completed: strengthened `internal/state/README.md`, expanded fixture notes, added ordering checks to `internal/state/tools/verify_fixtures.py`, and normalized `internal/state/fixtures/topology_multi_zone.v1.snapshot.json` to the documented sort order.
-- Validation: `python -m py_compile internal/state/tools/canonical_hash.py internal/state/tools/validate_snapshot.py internal/state/tools/verify_fixtures.py`; `python internal/state/tools/verify_fixtures.py`
+- Scope completed: added `internal/state/tools/normalize_snapshot.py`, updated `internal/state/tools/verify_fixtures.py` to reuse normalization logic, and documented the normalizer workflow in `internal/state/fixtures/README.md`.
+- Validation: `python -m py_compile internal/state/tools/canonical_hash.py internal/state/tools/validate_snapshot.py internal/state/tools/normalize_snapshot.py internal/state/tools/verify_fixtures.py`; `python internal/state/tools/verify_fixtures.py`; `python internal/state/tools/normalize_snapshot.py --in internal/state/fixtures/topology_multi_zone.v1.snapshot.json --out -`
 - See `internal/state/HANDOFF.md` for the detailed handoff.

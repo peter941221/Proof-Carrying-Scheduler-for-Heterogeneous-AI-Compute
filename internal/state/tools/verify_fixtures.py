@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from canonical_hash import canonical_json_bytes, sha256_prefixed
+from normalize_snapshot import normalize_snapshot_payload
 from validate_snapshot import validate_snapshot_payload
 
 
@@ -33,31 +34,18 @@ def _compute_snapshot_hash(snapshot_payload: Any) -> str:
     return sha256_prefixed(canonical_json_bytes(without_hash))
 
 
-def _node_sort_key(node: dict[str, Any]) -> tuple[str, str, str, str]:
-    return (
-        str(node.get("clusterId") or ""),
-        str(node.get("region") or ""),
-        str(node.get("zone") or ""),
-        str(node.get("nodeId") or ""),
-    )
-
-
-def _edge_sort_key(edge: dict[str, Any]) -> tuple[str, str]:
-    return (str(edge.get("srcId") or ""), str(edge.get("dstId") or ""))
-
-
 def _check_normalized_order(snapshot_payload: dict[str, Any]) -> str | None:
+    normalized = normalize_snapshot_payload(snapshot_payload)
+
     nodes = snapshot_payload.get("nodes") or []
-    if isinstance(nodes, list):
-        sorted_nodes = sorted(nodes, key=_node_sort_key)
-        if nodes != sorted_nodes:
-            return "nodes not sorted by clusterId, region, zone, nodeId"
+    normalized_nodes = normalized.get("nodes") or []
+    if isinstance(nodes, list) and nodes != normalized_nodes:
+        return "nodes not sorted by clusterId, region, zone, nodeId"
 
     edges = snapshot_payload.get("networkEdges") or []
-    if isinstance(edges, list):
-        sorted_edges = sorted(edges, key=_edge_sort_key)
-        if edges != sorted_edges:
-            return "networkEdges not sorted by srcId, dstId"
+    normalized_edges = normalized.get("networkEdges") or []
+    if isinstance(edges, list) and edges != normalized_edges:
+        return "networkEdges not sorted by srcId, dstId"
 
     return None
 
