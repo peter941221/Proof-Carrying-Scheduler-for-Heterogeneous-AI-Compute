@@ -10,3 +10,10 @@ spec/AGENTS.md
 internal/**/AGENTS.md
 verifier/AGENTS.md
 proofs/AGENTS.md
+
+# Local reusable tooling (keep out of public repo)
+local_tools/
+
+# Generated Python artifacts
+__pycache__/
+*.pyc
