@@ -6,8 +6,9 @@
 - object keys are sorted lexicographically
 - maps are emitted with sorted keys
 - arrays preserve semantic order from the bundle payload
-- numbers are emitted in deterministic JSON form with no locale-specific formatting
+- numbers are emitted in a single deterministic form (recommendation: RFC 8785 / JCS number formatting)
 - bytes fields are base64 encoded before hashing
+- timestamps use the protobuf JSON mapping in UTC with a `Z` suffix (producers must not emit equivalent-but-different encodings)
 - absent optional fields are omitted, not serialized as `null`
 
 ## Hash scope

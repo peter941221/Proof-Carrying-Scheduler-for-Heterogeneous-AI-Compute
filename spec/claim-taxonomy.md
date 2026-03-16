@@ -22,5 +22,10 @@
 ## Usage rules
 
 - every proof artifact or verifier report should reference one or more claim IDs
-- claims may be marked `implemented`, `checked`, `modeled`, or `planned`
+- claims may be marked using the shared `ClaimStatus` vocabulary:
+  - `CLAIM_STATUS_PLANNED`
+  - `CLAIM_STATUS_MODELED`
+  - `CLAIM_STATUS_CHECKED`
+  - `CLAIM_STATUS_IMPLEMENTED`
+  - `CLAIM_STATUS_VERIFIED`
 - no document should imply a stronger guarantee than the current claim status supports

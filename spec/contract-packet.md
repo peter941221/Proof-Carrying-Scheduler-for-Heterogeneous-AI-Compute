@@ -26,6 +26,6 @@ The first freeze establishes:
 
 - `DecisionBundle` as the evidence source of truth
 - deterministic snapshot metadata and hash boundaries
-- snapshot, model, policy, and solver config hash references
+- snapshot version plus snapshot/model/policy/solver-config hash references
 - deterministic score and constraint witness payloads
 - verifier input/output contracts and claim status vocabulary that remain stable while modules iterate

@@ -14,7 +14,7 @@
 
 These flags must be internally consistent:
 
-- if `valid = true`, no `ISSUE_SEVERITY_ERROR` or `ISSUE_SEVERITY_CRITICAL` issue may remain unresolved
+- if `valid = true`, the response must not contain any `ISSUE_SEVERITY_ERROR` or `ISSUE_SEVERITY_CRITICAL` issues
 - if `signature_valid = false`, then `valid` must be `false`
 - if `constraints_valid = false`, then `valid` must be `false`
 
@@ -47,3 +47,11 @@ The verifier must:
 - report every failing check as at least one structured issue
 - avoid silent downgrade from failed checks to warnings
 - attach related IDs whenever a task, assignment, or constraint can be pinpointed
+
+## VerifyRequest toggles
+
+`VerifyRequest` may disable certain checks (e.g. `verify_signature = false`).
+
+Contract rule:
+- if a check is disabled, the corresponding `*_valid` flag must be `true` and the verifier should emit an `ISSUE_SEVERITY_INFO` issue indicating the check was skipped (e.g. `SIGNATURE.SKIPPED`).
+- if `strict_mode = true`, skipped checks must be reported as `ISSUE_SEVERITY_ERROR` and `valid` must be `false`.
