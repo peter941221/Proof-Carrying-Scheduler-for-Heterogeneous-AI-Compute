@@ -8,6 +8,7 @@
 
 - Tightened verifier-facing protobuf comments around fallback semantics, counterfactual interpretation, bundle hashing, signer-policy lookup, and verification result booleans.
 - Kept the wire surface frozen: no field renames, enum changes, or new fields.
+- Revalidated the frozen protobuf surface in this round while the spec added missing claim artifact placeholder guidance.
 
 ## Files changed
 
@@ -15,7 +16,7 @@
 
 ## Validation run
 
-- command: `powershell -Command "$content = Get-Content api/proto/pcs/v1/scheduler.proto -Raw; if ([string]::IsNullOrWhiteSpace($content)) { throw 'scheduler.proto is empty' }"`
+- command: `protoc -I api/proto -I C:\Users\peter\anaconda3\Library\include --descriptor_set_out=$env:TEMP\pcs_api.desc --include_imports api/proto/pcs/v1/scheduler.proto`
 - result: pass
 
 ## Contract impact
@@ -28,6 +29,7 @@
   - `bundle_hash` chain coverage when `prev_bundle_hash` is present
   - `signer_key_id` as the lookup key for signature procedure
   - `VerifyResponse` booleans when checks are skipped under contract rules
+- This round made no additional API/protobuf edits.
 
 ## Risks / follow-ups
 

@@ -6,25 +6,25 @@
 
 ## Summary
 
-- Tightened normative wording in the shared contract docs so bundle status, skipped verification checks, and claim status reporting stay singular across modules.
-- Kept examples and frozen surfaces aligned; no new contract surface was introduced.
+- Added explicit `ClaimCheck.artifact_refs` placeholder guidance so each initial claim family has a stable artifact channel reserved.
+- Kept the contract frozen otherwise; no semantic expansion beyond the coordination-packet deliverable.
 
 ## Files changed
 
 - `spec/claim-taxonomy.md`
-- `spec/decision-bundle.md`
-- `spec/verification-report.md`
 
 ## Validation run
 
 - command: `python -m json.tool spec/examples/decision-bundle.minimal.json > $null`
 - result: pass
+- command: `protoc -I api/proto -I C:\Users\peter\anaconda3\Library\include --descriptor_set_out=$env:TEMP\pcs_api.desc --include_imports api/proto/pcs/v1/scheduler.proto`
+- result: pass
 
 ## Resolved ambiguities
 
-- `DECISION_STATUS_PARTIAL` now explicitly covers degraded decisions, fallback paths, and policy-approved relaxations, with required `fallback` plus relevant `constraint_evals`.
-- Skipped verifier checks are now explicitly required to surface as issues even when `strict_mode = false` and the corresponding `*_valid` flag remains `true`.
-- `ClaimCheck.status` is now explicitly tied to the strongest status justified by the referenced artifacts at the stated boundary.
+- `ClaimCheck.artifact_refs` now has a recommended stable placeholder format: `<artifact_type>:<stable_id>`.
+- Every initial claim family now has at least one placeholder artifact reference channel reserved (`model`, `log`, or `report`) so downstream modules can attach artifacts consistently.
+- Placeholder refs are explicitly non-evidentiary and do not justify raising `ClaimStatus`.
 
 ## Risks / follow-ups
 
