@@ -153,9 +153,11 @@ To make bundle replay stable:
 - For candidate generation:
   - build a stable list of eligible nodes sorted by `node_id asc`
   - enumerate candidate node-sets in lexicographic order of the `node_ids` tuple
+- Preserve the same task order when emitting `tasks`, and use that same task order as the primary key
+  when evidence sorts `candidates` and `assignments` for canonical JSON.
 - When selecting winners, break ties by:
   - total `Assignment` contribution (higher is better)
-  - then `assignment_id` / `candidate_id` lexicographic
+  - then tie-break contract from `scoring.md`
 
 ## Selection algorithm (week-1, deterministic greedy)
 

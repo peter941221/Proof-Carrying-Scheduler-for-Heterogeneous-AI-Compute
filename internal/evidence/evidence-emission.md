@@ -30,15 +30,17 @@ It must remain consistent with:
      reserved global subject ID `system`
    - ensure all `candidate_id` / `assignment_id` strings match the deterministic rules in
      `internal/scheduler/decision-flow.md`
-3. **Canonicalize + hash**
+3. **Set chain linkage**
+   - if bundle chaining is enabled and a previous bundle exists, set `prev_bundle_hash` before hashing
+   - if no previous bundle exists, omit `prev_bundle_hash`
+4. **Canonicalize + hash**
    - apply `spec/canonical-json.md` rules
    - compute `bundle_hash` over canonical JSON bytes with `bundle_hash` + `signature` omitted
-4. **Sign**
+5. **Sign**
    - set `signer_key_id`
    - produce `signature` over hash bytes (or canonical bytes as policy dictates)
-5. **Finalize**
-   - set `created_at`
-   - optionally set `prev_bundle_hash` if chaining is enabled
+6. **Finalize**
+   - set `created_at` last so implementations do not accidentally treat it as signer input unless policy explicitly requires that
 
 ## Deterministic ordering (required because JSON arrays preserve order)
 
@@ -47,9 +49,8 @@ repeated field in `DecisionBundle`:
 
 - `tasks`: use the scheduler task order (see `internal/scheduler/decision-flow.md`), i.e.
   `(priority desc, urgency desc, task_id asc)`.
-- `candidates`: stable sort by `(task_id asc, candidate_id asc)`. (Within a task, `candidate_id`
-  already encodes deterministic node ordering.)
-- `assignments`: stable sort by `(task_id asc, assignment_id asc)`.
+- `candidates`: stable sort by scheduler task order first, then `candidate_id asc`.
+- `assignments`: stable sort by scheduler task order first, then `assignment_id asc`.
 - `constraint_evals`: stable sort by `(subject_id asc, constraint_id asc, satisfied desc)`.
 - `counterfactuals` (if present): stable sort by `(counterfactual_id asc)`.
 

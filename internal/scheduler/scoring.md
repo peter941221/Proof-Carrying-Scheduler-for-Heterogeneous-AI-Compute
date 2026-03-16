@@ -84,6 +84,10 @@ When two candidates or assignments have equal total contribution within a config
 
 1. prefer the one with lower `expected_cost_usd_per_hour`
 2. then prefer lower `expected_carbon_gco2_per_hour`
-3. then prefer lexicographically smaller `candidate_id` / `assignment_id`
+3. then prefer lower `expected_p95_latency_ms` when that term is modeled for both options
+4. then prefer lexicographically smaller `candidate_id` / `assignment_id`
+
+The epsilon itself must be policy-defined and replayable via `SnapshotRef.policy_hash`; if no epsilon
+is configured, use exact floating-point comparison of the emitted `contribution` values.
 
 If tie-breaking changes, treat it as contract-impacting because it changes replay determinism.

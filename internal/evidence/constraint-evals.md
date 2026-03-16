@@ -55,7 +55,8 @@ These strings are referenced by `FallbackReason.related_constraints` and by veri
 - `subject_id`
   - prefer `assignment_id` for assignment-level constraints
   - use `task_id` for task-wide constraints
-  - use a stable system-wide ID (e.g., `system`) only when truly global
+  - use the stable system-wide ID `system` only when the constraint is truly global and cannot be
+    attached to one task, candidate, or assignment
 - `expression`
   - human-readable, but must match the semantics the verifier implements
   - keep it short; do not embed unbounded logs
@@ -71,6 +72,8 @@ These strings are referenced by `FallbackReason.related_constraints` and by veri
     - `task_id`
     - `assignment_id`
     - involved `node_id`s
+    - `candidate_id` when the witness is explaining why one examined candidate failed or was the
+      closest-to-feasible option for an unassigned task
 
 ## Conflict and infeasible paths
 
