@@ -39,3 +39,4 @@ This module independently checks scheduler evidence without trusting the schedul
 - stage order and flag semantics: `verification-stages.md`
 - issue code catalog: `issue-codes.md`
 - checked-claim reporting policy: `claim-reporting.md`
+- claim-to-stage matrix: `claim-matrix.md`

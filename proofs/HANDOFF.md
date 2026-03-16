@@ -50,7 +50,7 @@
 ## Validation run
 
 - command:
-- Markdown relative-link check across owned docs + proof placeholder existence check + claim traceability coverage check + TLA config invariant coverage check + assumptions file presence check (PowerShell one-liner)
+- Markdown relative-link check across owned docs + verifier claim-matrix coverage check (PowerShell one-liner)
 - result:
 - pass
 

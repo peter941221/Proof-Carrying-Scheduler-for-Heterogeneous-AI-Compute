@@ -12,12 +12,14 @@
   - explicit checked-claim reporting policy that prevents lifecycle overstatement
 - Tightened claim synthesis guidance so `checked_claims` are emitted only after final stage outcomes are known, including `blocked` handling after hard-stop failures.
 - Added a stage outcome table that gives future implementations a direct path from stage result to response flags and claim-synthesis inputs.
+- Added a durable claim matrix that maps each current verifier-facing claim ID to required stages, downgrade behavior, and stable `artifact_refs` guidance.
 
 ## Files changed
 
 - `verifier/verification-stages.md`
 - `verifier/issue-codes.md`
 - `verifier/claim-reporting.md`
+- `verifier/claim-matrix.md`
 - `verifier/README.md`
 
 ## Stage coverage
@@ -29,14 +31,14 @@
 - synthesis stage:
 - S8 derives `checked_claims` only after enabled stages resolve to `passed`, `failed`, `skipped`, or `blocked`
 - implementation guide:
-- `verifier/verification-stages.md` now includes a stage outcome table mapping each stage result to flag effects and claim-synthesis inputs
+- `verifier/verification-stages.md` includes a stage outcome table and `verifier/claim-matrix.md` maps claim IDs to required stages, downgrade rules, and stable artifact refs
 - skipped-stage policy:
 - disabled stages must set the corresponding boolean flag to `false` and emit an `INFO` issue (`*.SKIPPED` / `CLAIM.SKIPPED_STAGE`) to avoid omission being mistaken for success
 
 ## Validation run
 
 - command:
-- Markdown relative-link check across owned docs + proof placeholder existence check + claim traceability coverage check + TLA config invariant coverage check + assumptions file presence check (PowerShell one-liner)
+- Markdown relative-link check across owned docs + verifier claim-matrix coverage check (PowerShell one-liner)
 - result:
 - pass
 

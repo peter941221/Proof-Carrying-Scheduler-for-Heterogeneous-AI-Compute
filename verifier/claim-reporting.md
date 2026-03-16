@@ -42,7 +42,7 @@ If the verifier encounters a claim ID that is not in `spec/claim-taxonomy.md`:
 Recommended synthesis order:
 
 1. collect the final stage outcome map (`passed`, `failed`, `skipped`, `blocked`)
-2. map outcomes to claim IDs using the table below
+2. map outcomes to claim IDs using `claim-matrix.md`
 3. emit `CHECKED` only for claims whose required stages all `passed`
 4. emit optional `PLANNED` entries for `failed`, `skipped`, or `blocked` claims with a short reason summary
 5. if any produced entry would imply stronger evidence than the stage outcome supports, emit `CLAIM.OVERSTATED_STATUS` and downgrade the claim status
@@ -77,6 +77,8 @@ BOUND.RELATIVE_GAP_REPORTING
   - prerequisite: S5 passed if the bound depends on replayed semantics
   - status: CHECKED only when S6 ran
 ```
+
+For compact implementation guidance, keep `claim-matrix.md` and this section aligned.
 
 ## `artifact_refs` guidance
 
