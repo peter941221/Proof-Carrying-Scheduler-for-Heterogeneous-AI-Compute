@@ -28,4 +28,5 @@
   - `CLAIM_STATUS_CHECKED`
   - `CLAIM_STATUS_IMPLEMENTED`
   - `CLAIM_STATUS_VERIFIED`
+- `ClaimCheck.status` records the strongest status actually supported by the referenced artifacts at the stated boundary
 - no document should imply a stronger guarantee than the current claim status supports

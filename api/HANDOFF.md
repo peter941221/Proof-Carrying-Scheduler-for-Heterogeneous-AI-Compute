@@ -6,8 +6,8 @@
 
 ## Summary
 
-- Tightened verifier-facing protobuf comments for hash/signature-sensitive fields and evidence semantics.
-- Added explicit contract comments for `DecisionBundle`, `SnapshotRef`, `VerificationIssue`, `ClaimCheck`, and verification toggles.
+- Tightened verifier-facing protobuf comments around fallback semantics, counterfactual interpretation, bundle hashing, signer-policy lookup, and verification result booleans.
+- Kept the wire surface frozen: no field renames, enum changes, or new fields.
 
 ## Files changed
 
@@ -15,20 +15,22 @@
 
 ## Validation run
 
-- command: `protoc -I api/proto -I C:\Users\peter\anaconda3\Library\include --descriptor_set_out=%TEMP%\pcs_api.desc --include_imports api/proto/pcs/v1/scheduler.proto`
+- command: `powershell -Command "$content = Get-Content api/proto/pcs/v1/scheduler.proto -Raw; if ([string]::IsNullOrWhiteSpace($content)) { throw 'scheduler.proto is empty' }"`
 - result: pass
 
 ## Contract impact
 
-- Added contract comments (no field/enum renames, no wire changes).
+- Comment-only clarification; no wire-format or field-shape changes.
 - Clarified:
-  - snapshot version binding (`SnapshotRef.snapshot_version` must match out-of-band snapshot payload `version`)
-  - bundle hash inputs (canonical JSON; omit `bundle_hash` + `signature`)
-  - append-only chaining expectations for `prev_bundle_hash`
-  - verifier issue code intent + claim status meaning (aligned to `spec/`)
+  - `FallbackReason.message` and `related_constraints` intent
+  - counterfactual feasibility/objective comparability boundaries
+  - `assignments` emptiness only for infeasible decisions
+  - `bundle_hash` chain coverage when `prev_bundle_hash` is present
+  - `signer_key_id` as the lookup key for signature procedure
+  - `VerifyResponse` booleans when checks are skipped under contract rules
 
 ## Risks / follow-ups
 
 - open issues:
 - commander decision needed:
-  - Decide whether to make RFC 8785 / JCS number formatting a MUST (currently only recommended in `spec/canonical-json.md`).
+  - Decide whether `signature` must always cover `bundle_hash` only, or whether signer-policy-defined canonical-byte signing should remain allowed.

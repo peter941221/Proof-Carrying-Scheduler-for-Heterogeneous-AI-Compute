@@ -6,33 +6,28 @@
 
 ## Summary
 
-- Closed key semantic gaps across decision bundle / snapshot / verification / claims docs so modules can implement without guessing.
-- Aligned terminology and added missing invariants (snapshot version binding, fallback presence, decision status semantics, claim status vocabulary).
-- Tightened canonicalization guidance (recommended RFC 8785 / JCS number formatting; UTC `Z` timestamps).
+- Tightened normative wording in the shared contract docs so bundle status, skipped verification checks, and claim status reporting stay singular across modules.
+- Kept examples and frozen surfaces aligned; no new contract surface was introduced.
 
 ## Files changed
 
-- `spec/canonical-json.md`
 - `spec/claim-taxonomy.md`
-- `spec/contract-packet.md`
 - `spec/decision-bundle.md`
-- `spec/snapshot-contract.md`
 - `spec/verification-report.md`
-- `spec/examples/decision-bundle.minimal.json`
 
 ## Validation run
 
-- command: `python -m json.tool spec/examples/decision-bundle.minimal.json`
+- command: `python -m json.tool spec/examples/decision-bundle.minimal.json > $null`
 - result: pass
 
 ## Resolved ambiguities
 
-- `SnapshotRef.snapshot_version` vs snapshot payload `version` binding is now explicitly required and reflected in the minimal example.
-- `VerifyRequest` skip/strict behavior is spelled out normatively in `verification-report.md`.
-- Claim status wording is aligned to protobuf `ClaimStatus` values (no free-form statuses).
+- `DECISION_STATUS_PARTIAL` now explicitly covers degraded decisions, fallback paths, and policy-approved relaxations, with required `fallback` plus relevant `constraint_evals`.
+- Skipped verifier checks are now explicitly required to surface as issues even when `strict_mode = false` and the corresponding `*_valid` flag remains `true`.
+- `ClaimCheck.status` is now explicitly tied to the strongest status justified by the referenced artifacts at the stated boundary.
 
 ## Risks / follow-ups
 
 - open issues:
 - commander decision needed:
-  - Confirm whether hash string representation should be fully specified (e.g. require `sha256:<hex>`), or remain an opaque string with a recommended format.
+  - Confirm whether the signer policy may choose between signing `bundle_hash` and signing canonical bytes, or whether the contract should collapse to a single required signature mode.

@@ -17,6 +17,7 @@ These flags must be internally consistent:
 - if `valid = true`, the response must not contain any `ISSUE_SEVERITY_ERROR` or `ISSUE_SEVERITY_CRITICAL` issues
 - if `signature_valid = false`, then `valid` must be `false`
 - if `constraints_valid = false`, then `valid` must be `false`
+- if a check is skipped and `strict_mode = false`, the corresponding `*_valid` flag remains `true` but the skip must still be surfaced in `issues`
 
 ## Issue code families
 
@@ -40,6 +41,8 @@ Each claim entry should include:
 - `artifact_refs`
 - a short summary
 
+`status` must not overstate the achieved boundary; use the shared lifecycle meanings from `spec/claim-lifecycle.md`.
+
 ## Minimal verifier behavior
 
 The verifier must:
@@ -47,6 +50,7 @@ The verifier must:
 - report every failing check as at least one structured issue
 - avoid silent downgrade from failed checks to warnings
 - attach related IDs whenever a task, assignment, or constraint can be pinpointed
+- emit skip issues for any disabled check, even when the overall result remains valid
 
 ## VerifyRequest toggles
 

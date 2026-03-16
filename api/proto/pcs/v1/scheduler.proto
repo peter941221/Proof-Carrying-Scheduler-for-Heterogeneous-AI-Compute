@@ -271,7 +271,9 @@ message BoundCertificate {
 message FallbackReason {
   // Must be present; use FALLBACK_CODE_NONE when no fallback occurred.
   FallbackCode code = 1;
+  // Human-readable explanation of why the scheduler degraded, exited early, or selected no fallback.
   string message = 2;
+  // Constraint IDs that directly contributed to the fallback decision, when known.
   repeated string related_constraints = 3;
 }
 
@@ -281,7 +283,9 @@ message Counterfactual {
   // Opaque structured delta describing how this scenario differs from the executed decision.
   // Consumers must not assume a particular patch/merge semantics unless documented elsewhere.
   google.protobuf.Struct delta = 3;
+  // feasible describes the counterfactual scenario under the same contract used for decision_status.
   bool feasible = 4;
+  // expected_objective is comparable only within the producer's declared objective model for this bundle.
   double expected_objective = 5;
   string explanation = 6;
 }
@@ -327,11 +331,11 @@ message DecisionBundle {
   repeated Task tasks = 5;
   // Optional candidate set included when needed for replay/explanation/shadow analysis.
   repeated Candidate candidates = 6;
-  // Executed assignment set (may be empty for infeasible decisions).
+  // Executed assignment set. It may be empty only for infeasible outcomes.
   repeated Assignment assignments = 7;
-  // Constraint witness payloads used by the verifier to justify feasibility/infeasibility.
+  // Constraint witness payloads used by the verifier to justify feasibility, degradation, or infeasibility.
   repeated ConstraintEval constraint_evals = 8;
-  // Optional optimization bound witness (required for CERTIFICATE_LEVEL_BOUNDED).
+  // Optimization bound witness. Required when certificate_level is CERTIFICATE_LEVEL_BOUNDED.
   BoundCertificate bound = 9;
   // Must be present; use FALLBACK_CODE_NONE when no fallback occurred.
   FallbackReason fallback = 10;
@@ -342,10 +346,12 @@ message DecisionBundle {
   // bundle_hash is computed over the canonical JSON form of DecisionBundle with:
   // - bundle_hash omitted
   // - signature omitted
+  // prev_bundle_hash remains in scope when present, so chain linkage is hash-covered.
   string bundle_hash = 13;
-  // signer_key_id identifies which key (or policy) produced signature.
+  // signer_key_id identifies which key or signer policy produced signature.
   string signer_key_id = 14;
   // signature covers bundle_hash or the canonical bytes, as defined by the signer policy.
+  // Verifiers must use signer_key_id to resolve which signature procedure applies.
   bytes signature = 15;
   // Timestamp when this bundle was finalized for hashing/signing.
   google.protobuf.Timestamp created_at = 16;
@@ -388,9 +394,13 @@ message ClaimCheck {
 message VerifyResponse {
   // Overall validity. See spec/verification-report.md for required consistency rules.
   bool valid = 1;
+  // true when signature verification either passed or was explicitly skipped under the contract rules.
   bool signature_valid = 2;
+  // true when constraint verification either passed or was explicitly skipped under the contract rules.
   bool constraints_valid = 3;
+  // true when bound verification either passed or was explicitly skipped under the contract rules.
   bool bound_valid = 4;
+  // true when counterfactual verification either passed or was explicitly skipped under the contract rules.
   bool counterfactuals_valid = 5;
   // Every failed (or skipped, when relevant) check must be surfaced as at least one issue.
   repeated VerificationIssue issues = 6;
