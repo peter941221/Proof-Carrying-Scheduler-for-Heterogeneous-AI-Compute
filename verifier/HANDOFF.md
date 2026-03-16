@@ -10,6 +10,7 @@
   - stage order + gating + hard-stop/soft-fail rules
   - stable issue-code catalog aligned with `spec/verification-report.md` families
   - explicit checked-claim reporting policy that prevents lifecycle overstatement
+- Tightened aggregate `VerifyResponse.valid` semantics so final stage outcomes alone determine validity, including how blocked stages inherit prior hard-stop failures.
 - Tightened claim synthesis guidance so `checked_claims` are emitted only after final stage outcomes are known, including `blocked` handling after hard-stop failures.
 - Added a stage outcome table that gives future implementations a direct path from stage result to response flags and claim-synthesis inputs.
 - Added a durable claim matrix that maps each current verifier-facing claim ID to required stages, downgrade behavior, and stable `artifact_refs` guidance.
@@ -17,10 +18,9 @@
 ## Files changed
 
 - `verifier/verification-stages.md`
-- `verifier/issue-codes.md`
 - `verifier/claim-reporting.md`
 - `verifier/claim-matrix.md`
-- `verifier/README.md`
+- `verifier/HANDOFF.md`
 
 ## Stage coverage
 
@@ -38,7 +38,7 @@
 ## Validation run
 
 - command:
-- Markdown relative-link check across owned docs + verifier claim-matrix coverage check (PowerShell one-liner)
+- Owned-doc markdown path check + proofs claim traceability coverage check (PowerShell one-liners)
 - result:
 - pass
 

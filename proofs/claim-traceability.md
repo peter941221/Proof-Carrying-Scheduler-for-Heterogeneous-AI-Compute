@@ -27,7 +27,7 @@ SAFETY.SNAPSHOT_CONSISTENCY
     - proofs/tla+/EvidenceChain.tla
     - proofs/tla+/README.md
     - proofs/tla+/ASSUMPTIONS.md
-  notes: covers per-entry binding to exactly one abstract snapshot_hash, not snapshot payload semantics
+  notes: covers per-entry binding to exactly one abstract snapshot_hash, not snapshot payload semantics or freshness
 
 EVIDENCE.APPEND_ONLY_CHAIN
   status: MODELED
@@ -35,7 +35,7 @@ EVIDENCE.APPEND_ONLY_CHAIN
     - proofs/tla+/EvidenceChain.tla
     - proofs/tla+/README.md
     - proofs/tla+/ASSUMPTIONS.md
-  notes: covers append-only predecessor linkage because append is the only modeled transition, not cryptographic collision resistance
+  notes: covers append-only immediate-predecessor linkage because append is the only modeled transition, not cryptographic collision resistance or ancestry proofs
 
 VERIFY.BUNDLE_SOUNDNESS
   status: PLANNED

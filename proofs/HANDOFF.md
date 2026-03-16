@@ -10,8 +10,8 @@
   - scope doc + claim↔artifact traceability
   - TLA+ skeleton model for append-only chain linkage and decision_id uniqueness
   - placeholder artifacts for deferred claims to keep filenames stable
-- Strengthened the Week-1 TLA+ asset by stating the explicit snapshot-binding invariant and a minimal append-progress property in the artifact docs.
-- Tightened claim traceability notes so each MODELED or PLANNED claim states the exact current boundary of the supporting artifact set.
+- Strengthened the Week-1 TLA+ asset by making the immediate-predecessor linkage boundary explicit in the assumptions artifact.
+- Tightened claim traceability notes so each MODELED or PLANNED claim states the exact current boundary of the supporting artifact set, including snapshot freshness and ancestry-proof exclusions.
 - Sharpened append-only semantics by making append the only modeled transition and reflecting that boundary in the scope and traceability docs.
 - Added a durable assumptions artifact so the abstract hash/snapshot boundary is explicit and reusable by future proof work.
 
@@ -19,16 +19,8 @@
 
 - `proofs/week-1-scope.md`
 - `proofs/claim-traceability.md`
-- `proofs/tla+/EvidenceChain.tla`
-- `proofs/tla+/EvidenceChain.cfg`
-- `proofs/tla+/README.md`
 - `proofs/tla+/ASSUMPTIONS.md`
-- `proofs/placeholders/SAFETY.RESOURCE_CAPACITY.md`
-- `proofs/placeholders/VERIFY.BUNDLE_SOUNDNESS.md`
-- `proofs/placeholders/VERIFY.CONFLICT_SOUNDNESS.md`
-- `proofs/placeholders/BOUND.RELATIVE_GAP_REPORTING.md`
-- `proofs/placeholders/LIVENESS.CONDITIONAL_COMPLETION.md`
-- `proofs/README.md`
+- `proofs/HANDOFF.md`
 
 ## Claim coverage
 
@@ -50,7 +42,7 @@
 ## Validation run
 
 - command:
-- Markdown relative-link check across owned docs + verifier claim-matrix coverage check (PowerShell one-liner)
+- Owned-doc markdown path check + proofs claim traceability coverage check (PowerShell one-liners)
 - result:
 - pass
 

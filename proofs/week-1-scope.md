@@ -29,7 +29,7 @@ Initial mapping to `spec/claim-taxonomy.md`:
 
 - `EVIDENCE.APPEND_ONLY_CHAIN` (target: `MODELED` in Week-1)
 - `SAFETY.UNIQUE_BINDING` (target: `MODELED` for decision_id uniqueness)
-- `SAFETY.SNAPSHOT_CONSISTENCY` (target: `MODELED` for bundle↔snapshot binding)
+- `SAFETY.SNAPSHOT_CONSISTENCY` (target: `MODELED` for bundle↔snapshot binding under abstract snapshot identifiers)
 
 Other claims remain `PLANNED` until additional semantics are modeled or checked.
 

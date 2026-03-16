@@ -25,4 +25,5 @@ BOUND.RELATIVE_GAP_REPORTING  S6                S6 passed for a bound-check requ
 ## Notes
 
 - `EVIDENCE.APPEND_ONLY_CHAIN` remains proof-backed rather than runtime-backed in v0 because current verifier stages do not define explicit chain validation semantics.
+- `SAFETY.SNAPSHOT_CONSISTENCY` should be emitted only when S4 passed; if S4 is skipped because no enabled stage requires snapshot material, the claim should be omitted or downgraded to `CLAIM_STATUS_PLANNED`, never `CHECKED`.
 - Future signature-related claim IDs should be added here only after the shared claim taxonomy names them.

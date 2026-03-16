@@ -7,6 +7,7 @@ This document defines how the verifier populates `VerifyResponse.checked_claims`
 - make omissions explicit (disabled stages must not read as success)
 - keep claim vocabulary consistent with `spec/claim-taxonomy.md`
 - support claim lifecycle (`PLANNED` -> `VERIFIED`) without overstating
+- make runtime output deterministic from the final stage outcome map alone
 
 ## ClaimCheck population rules
 

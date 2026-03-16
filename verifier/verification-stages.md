@@ -48,9 +48,19 @@ If a stage is intentionally skipped due to `VerifyRequest` flags, the verifier m
 
 ## `VerifyResponse` flag semantics
 
-`VerifyResponse.valid` is the aggregate truth of the verification attempt under the given `VerifyRequest` policy:
+`VerifyResponse.valid` is the aggregate truth of the verification attempt under the given `VerifyRequest` policy.
 
-- `valid = true` implies there are no unresolved `ERROR` or `CRITICAL` issues
+Set `valid` deterministically from final stage outcomes as follows:
+
+- `valid = false` if any executed mandatory stage (`S0-S4`) ends `failed`
+- `valid = false` if any enabled optional stage (`S5-S7`) ends `failed`
+- `valid = false` if claim synthesis (`S8`) detects an overstated claim status and emits `CLAIM.OVERSTATED_STATUS`
+- `valid = true` otherwise, including when optional stages are `skipped` because the request disabled them
+
+Blocked stages do not independently make the response valid; they inherit the invalidating earlier hard-stop that caused the block.
+
+Per-stage flags remain stage-local evidence markers:
+
 - `signature_valid = true` implies S3 ran and the signature check succeeded
 - `constraints_valid = true` implies S5 ran and all declared checks succeeded
 - `bound_valid = true` implies S6 ran and bound semantics match the bundle
