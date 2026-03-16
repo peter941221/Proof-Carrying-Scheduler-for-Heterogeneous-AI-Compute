@@ -6,7 +6,7 @@
 
 ## Summary
 
-This worktree completed the State mission: it now includes an implementation-ready snapshot assembly guide, deterministic fixtures, and small local tools for hash and fail-fast verification. Generated Python bytecode was removed from source control and is now ignored inside the module scope.
+This worker round tightened the implementation guide for snapshot assembly, strengthened fixture documentation, and upgraded local verification to enforce deterministic node and edge ordering in addition to fail-fast validation and hash checks. One existing topology fixture was normalized to the documented sort order and re-hashed so the fixture set now matches the README contract.
 
 ## Files changed / added (owned scope only)
 
@@ -14,35 +14,27 @@ This worktree completed the State mission: it now includes an implementation-rea
 internal/state/
 ├─ README.md
 ├─ HANDOFF.md
-├─ .gitignore
 ├─ fixtures/
 │  ├─ README.md
-│  ├─ mixed_cpu_gpu.v1.snapshot.json
-│  ├─ topology_multi_zone.v1.snapshot.json
-│  └─ unknown_node_ref.v1.snapshot.invalid.json
+│  └─ topology_multi_zone.v1.snapshot.json
 └─ tools/
-   ├─ canonical_hash.py
-   ├─ validate_snapshot.py
    └─ verify_fixtures.py
 ```
 
 ## Contract decisions captured in `internal/state/README.md`
 
 - State-owned payload shape is the protobuf JSON form of `SnapshotMetadata`.
+- Snapshot assembly flow is explicit: project -> validate -> normalize -> omit nulls -> hash -> emit.
 - Normalization order is explicit before hashing:
   - `nodes[]`: `clusterId`, `region`, `zone`, `nodeId`
   - `networkEdges[]`: `srcId`, `dstId`
-  - maps: lexicographically sorted keys; omit absent optionals
+  - maps: lexicographically sorted keys during canonical JSON emission
 - Hash boundary is explicit:
-  - include node capacities, edges, and policy-relevant labels/metadata in the snapshot payload
-  - exclude `snapshotHash` itself and external transient inputs
+  - include node capacities, node labels, snapshot labels, and topology edges/metrics used by scheduling
+  - exclude `snapshotHash` itself and transient external inputs
 - Fail-fast behavior is explicit:
   - unknown edge references fail assembly before hashing/scheduling
-  - missing required identifiers and malformed structural arrays also fail assembly
-- Snapshot hash policy is explicit:
-  - canonical JSON with `snapshotHash` stripped
-  - `sha256` over UTF-8 canonical bytes
-  - encoded as `sha256:<hex>`
+  - missing required identifiers and malformed arrays/object entries also fail assembly
 
 ## Fixtures (what they cover)
 
@@ -50,7 +42,7 @@ internal/state/
   - valid mixed CPU and GPU nodes in one cluster
   - includes an edge so `networkEdges[]` participates in the hash boundary
 - `topology_multi_zone.v1.snapshot.json`
-  - valid multi-zone and multi-region topology with multiple edges
+  - valid multi-zone and multi-region topology with deterministic node and edge ordering
   - includes `ResourceVector.ext` map ordering coverage
 - `unknown_node_ref.v1.snapshot.invalid.json`
   - invalid fixture where an edge references an unknown node id
@@ -78,5 +70,5 @@ Result:
 
 ## Open questions / follow-ups
 
-- The repo examples use `sha256:` prefixes, but the shared snapshot contract still does not explicitly standardize the algorithm string.
-- `SnapshotMetadata` currently carries the full snapshot payload; if the shared contract later introduces a dedicated `Snapshot` message, the state README and fixtures should be realigned to that type.
+- The root snapshot contract mentions unknown cluster and fault-domain references, but the current shared payload shape does not yet expose first-class cluster or fault-domain reference tables to validate against.
+- The shared contract still implies `SnapshotMetadata`; if a dedicated snapshot message is introduced later, realign this README, fixtures, and tooling together.

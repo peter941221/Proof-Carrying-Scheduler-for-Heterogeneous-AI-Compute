@@ -6,23 +6,53 @@
   },
   "networkEdges": [
     {
-      "dstId": "node-west-a",
-      "jitterMs": 0.08,
-      "lossRate": 0,
-      "p50LatencyMs": 0.22,
-      "p95LatencyMs": 0.6,
-      "srcId": "node-west-b"
-    },
-    {
       "dstId": "node-east-a",
       "jitterMs": 1.4,
       "lossRate": 0.0001,
       "p50LatencyMs": 58.2,
       "p95LatencyMs": 72.5,
       "srcId": "node-west-a"
+    },
+    {
+      "dstId": "node-west-a",
+      "jitterMs": 0.08,
+      "lossRate": 0,
+      "p50LatencyMs": 0.22,
+      "p95LatencyMs": 0.6,
+      "srcId": "node-west-b"
     }
   ],
   "nodes": [
+    {
+      "capacityFree": {
+        "acceleratorType": "T4",
+        "cpuCores": 32,
+        "gpuCount": 1,
+        "gpuMemoryGib": 16,
+        "memoryGib": 128,
+        "netMbps": 10000,
+        "storageGib": 3000
+      },
+      "capacityTotal": {
+        "acceleratorType": "T4",
+        "cpuCores": 32,
+        "gpuCount": 1,
+        "gpuMemoryGib": 16,
+        "memoryGib": 128,
+        "netMbps": 10000,
+        "storageGib": 3000
+      },
+      "clusterId": "cluster-east",
+      "labels": {
+        "arch": "x86_64",
+        "role": "gpu",
+        "sku": "g2-standard"
+      },
+      "nodeId": "node-east-a",
+      "region": "us-east1",
+      "spot": true,
+      "zone": "us-east1-a"
+    },
     {
       "capacityFree": {
         "acceleratorType": "",
@@ -86,39 +116,9 @@
       "region": "us-west1",
       "spot": false,
       "zone": "us-west1-b"
-    },
-    {
-      "capacityFree": {
-        "acceleratorType": "T4",
-        "cpuCores": 32,
-        "gpuCount": 1,
-        "gpuMemoryGib": 16,
-        "memoryGib": 128,
-        "netMbps": 10000,
-        "storageGib": 3000
-      },
-      "capacityTotal": {
-        "acceleratorType": "T4",
-        "cpuCores": 32,
-        "gpuCount": 1,
-        "gpuMemoryGib": 16,
-        "memoryGib": 128,
-        "netMbps": 10000,
-        "storageGib": 3000
-      },
-      "clusterId": "cluster-east",
-      "labels": {
-        "arch": "x86_64",
-        "role": "gpu",
-        "sku": "g2-standard"
-      },
-      "nodeId": "node-east-a",
-      "region": "us-east1",
-      "spot": true,
-      "zone": "us-east1-a"
     }
   ],
-  "snapshotHash": "sha256:abafa8b632b2dafc96b538266599cbf10dddae6976d8272fbc6a4684ebb875e0",
+  "snapshotHash": "sha256:0374610430b8b30e1e7ff98bd95c169977cb55889bf160e1751551107ce773ca",
   "snapshotId": "snap_topology_multi_zone_v1",
   "snapshotTime": "2026-03-15T00:00:00Z",
   "version": 1

@@ -1,26 +1,38 @@
 # State fixtures
 
-Fixtures in this directory are intended to be small, deterministic examples that exercise snapshot normalization and hashing rules.
+Fixtures in this directory are intentionally small, deterministic examples for snapshot normalization, fail-fast validation, and hash verification.
 
-## Files
+## File conventions
 
-- `*.snapshot.json` are snapshot-shaped payloads aligned with the protobuf JSON names in `api/proto/pcs/v1/scheduler.proto` (`SnapshotMetadata`).
-- `*.snapshot.invalid.json` are intentionally invalid inputs used to define fail-fast behavior (they are not included in the hash verification pass).
+- `*.snapshot.json`: valid snapshot payloads aligned to protobuf JSON names from `api/proto/pcs/v1/scheduler.proto`
+- `*.snapshot.invalid.json`: intentionally invalid payloads that must fail assembly before hashing or scheduling
 
-### Fixture list (what each tests)
+## Fixture list
 
 - `mixed_cpu_gpu.v1.snapshot.json`
-  - mixed CPU-only and GPU nodes in one cluster
-  - includes a simple edge to ensure `networkEdges[]` participates in the hash boundary
+  - valid mixed CPU-only and GPU nodes in one cluster
+  - includes one topology edge so `networkEdges[]` is inside the hash boundary
+  - keeps node ordering explicit for a small baseline fixture
 - `topology_multi_zone.v1.snapshot.json`
-  - multiple zones and regions
-  - multiple edges (tests deterministic edge ordering by `srcId` then `dstId`)
-  - includes a `ResourceVector.ext` map to exercise canonical map key sorting
+  - valid multi-region, multi-zone topology example
+  - includes multiple edges to exercise deterministic edge ordering by `srcId` then `dstId`
+  - includes `ResourceVector.ext` map content to exercise canonical object-key sorting
 - `unknown_node_ref.v1.snapshot.invalid.json`
-  - invalid: a `networkEdges[].dstId` references an unknown node ID
-  - should fail snapshot assembly before hashing/scheduling (fail-fast behavior)
+  - invalid fixture where `networkEdges[].dstId` references an unknown node
+  - defines the required fail-fast behavior before hashing and before scheduling
 
-## Verify snapshot hashes
+## What verification checks
+
+`internal/state/tools/verify_fixtures.py` checks that:
+
+- valid fixtures pass structural/reference validation
+- valid fixtures already use deterministic node ordering
+- valid fixtures already use deterministic edge ordering
+- valid fixtures contain the expected `snapshotHash`
+- computed hashes match canonical JSON rules with `snapshotHash` stripped
+- invalid fixtures fail validation
+
+## Verify locally
 
 From the repo root:
 
@@ -28,15 +40,7 @@ From the repo root:
 python internal/state/tools/verify_fixtures.py
 ```
 
-This checks:
-
-- valid fixtures:
-  - pass fail-fast validation (unknown references, missing IDs)
-  - have correct `snapshotHash` matching canonical JSON hashing rules
-- invalid fixtures:
-  - must fail fail-fast validation (at least one validation issue)
-
-To compute a hash for a snapshot payload (stripping `snapshotHash` before hashing):
+To compute a snapshot hash directly:
 
 ```powershell
 python internal/state/tools/canonical_hash.py --mode snapshot --in internal/state/fixtures/mixed_cpu_gpu.v1.snapshot.json

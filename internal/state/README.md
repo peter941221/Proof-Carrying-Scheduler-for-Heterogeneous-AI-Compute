@@ -1,19 +1,21 @@
 # State Module
 
-This module builds deterministic scheduler snapshots from normalized cluster and workload inputs.
+This module assembles deterministic scheduler snapshots from normalized cluster and workload inputs.
 
-## Goal (week-1)
+## Goal
 
-- produce a normalized snapshot payload that is deterministic and stable under input ordering
-- define and enforce unknown-reference failure behavior early (fail before scheduling)
-- provide fixtures that cover mixed CPU/GPU clusters and common topology variants
+- define the exact snapshot payload shape the state module owns
+- make normalization rules implementation-ready so input arrival order cannot change results
+- fail fast on bad references before scheduling or hashing
+- provide fixtures and local tooling that lock the contract into deterministic examples
 
 ## Owns
 
-- internal snapshot models
-- normalization rules
-- snapshot assembly
-- snapshot hashing support
+- internal snapshot models and assembly flow
+- pre-hash normalization rules
+- snapshot payload hashing support
+- fail-fast structural/reference validation
+- local fixtures that exercise valid and invalid paths
 
 ## Depends on
 
@@ -22,26 +24,19 @@ This module builds deterministic scheduler snapshots from normalized cluster and
 - `../../spec/canonical-json.md`
 - `README.md`
 
-## Inputs and outputs
+## Contract anchors
 
-- input: telemetry, capacity, topology, labels, and task-facing metadata
-- output: deterministic snapshot payload plus `snapshot_id` / `snapshot_hash`
+Use these as the source of truth when implementing the module:
 
-## Contract anchors (must align)
+- `../../spec/snapshot-contract.md`: required sections, determinism rules, fail-fast behavior
+- `../../spec/canonical-json.md`: canonical JSON rules and omitted/null handling
+- `../../api/proto/pcs/v1/scheduler.proto`: protobuf field names and JSON names for `Node`, `NetworkEdge`, `ResourceVector`, and `SnapshotMetadata`
 
-- `../../spec/snapshot-contract.md` (determinism + hash boundary)
-- `../../spec/canonical-json.md` (canonical JSON rules)
-- `../../api/proto/pcs/v1/scheduler.proto` (`Node`, `NetworkEdge`, `SnapshotMetadata`, `SnapshotRef`)
+This README is the implementation guide for the state worktree; it summarizes those contracts without changing them.
 
-## Must not change directly
+## Output shape
 
-- shared protobuf contracts
-- canonical JSON or bundle hash semantics
-- scheduler or evidence behavior outside the snapshot interface
-
-## State-owned structures
-
-The state module assembles the JSON form of `SnapshotMetadata` and treats it as the implementation target for hashing and fixtures.
+The implementation target is the protobuf JSON form of `SnapshotMetadata`.
 
 Required top-level fields:
 
@@ -52,96 +47,193 @@ Required top-level fields:
 - `networkEdges[]`
 - `labels{}`
 
-Hash-covered content is the normalized snapshot payload with `snapshotHash` omitted during hashing and restored afterward.
+Optional top-level field:
 
-### Node expectations
+- `snapshotHash`
 
-Each node entry is the protobuf JSON form of `Node` and must include enough identity to support stable ordering and reference checks:
+The state module should assemble a complete normalized snapshot object, compute `snapshotHash` over the hash-covered content, then write the hash back into the emitted payload.
 
-- required identifiers: `nodeId`, `clusterId`
-- stable placement fields: `region`, `zone`
-- optional policy/topology fields: `faultDomain`, `spot`, `labels{}`
-- resource sections: `capacityTotal`, `capacityFree`
+## State-owned structures
 
-### Edge expectations
+### `nodes[]`
 
-Each edge entry is the protobuf JSON form of `NetworkEdge`:
+Each entry is the protobuf JSON form of `Node`.
 
-- required references: `srcId`, `dstId`
-- optional metrics: `p50LatencyMs`, `p95LatencyMs`, `jitterMs`, `lossRate`, `observedAt`
+Required identity fields:
 
-Edges are part of the snapshot hash boundary whenever they influence candidate evaluation.
+- `nodeId`
+- `clusterId`
 
-## Normalization order (deterministic)
+Stable placement fields used by normalization and topology-aware scheduling:
 
-The normalization pipeline must produce a payload that is stable across:
+- `region`
+- `zone`
 
-- different input ordering (node/edge arrival order)
-- missing optional fields handled deterministically
-- map key ordering handled by canonical JSON emission
+Common optional policy/topology fields:
 
-Recommended deterministic ordering rules before hashing:
+- `faultDomain`
+- `spot`
+- `labels{}`
+- `observedAt`
+- pricing / carbon / risk / health fields
 
-- `nodes[]` sorted by:
-  1. `clusterId`
-  2. `region`
-  3. `zone`
-  4. `nodeId`
-- `networkEdges[]` sorted by:
-  1. `srcId`
-  2. `dstId`
-- maps (`labels`, `ResourceVector.ext`) emitted with lexicographically sorted keys
-- absent optional fields omitted instead of serialized as `null`
+Resource sections:
 
-Arrays should preserve this semantic order into canonical JSON; canonicalization sorts object keys but does not reorder arrays.
+- `capacityTotal`
+- `capacityFree`
+
+Each resource section is the protobuf JSON form of `ResourceVector`, including optional `ext{}` for implementation-specific metrics.
+
+### `networkEdges[]`
+
+Each entry is the protobuf JSON form of `NetworkEdge`.
+
+Required reference fields:
+
+- `srcId`
+- `dstId`
+
+Optional edge metrics:
+
+- `p50LatencyMs`
+- `p95LatencyMs`
+- `jitterMs`
+- `lossRate`
+- `observedAt`
+
+Edges are inside the snapshot hash boundary whenever they affect candidate generation, placement feasibility, or scoring.
+
+### `labels{}`
+
+Top-level labels hold snapshot-wide policy-relevant metadata.
+
+Implementation guidance:
+
+- keep only labels that affect placement, filtering, or policy interpretation
+- use protobuf JSON field names exactly
+- emit object keys in canonical order through canonical JSON, not by preserving ingestion order
+
+## Assembly flow
+
+Implement snapshot assembly in this order:
+
+1. ingest raw node, resource, topology, and label inputs
+2. project them into protobuf-JSON-shaped snapshot objects
+3. validate required identifiers and reference integrity
+4. normalize arrays and maps into deterministic semantic order
+5. omit absent optional fields instead of serializing `null`
+6. remove `snapshotHash` from the object before hashing
+7. canonicalize JSON and compute `sha256:<hex>`
+8. restore `snapshotHash` and emit the final payload
+
+If step 3 fails, stop immediately and do not emit a hash.
+
+## Normalization order
+
+Canonical JSON sorts object keys, but it does not reorder arrays. The state module must therefore normalize semantic array order before hashing.
+
+### Node ordering
+
+Sort `nodes[]` by these keys, in order:
+
+1. `clusterId`
+2. `region`
+3. `zone`
+4. `nodeId`
+
+Tie-break behavior:
+
+- compare missing values as empty strings
+- do not depend on ingestion order once these keys are available
+
+### Edge ordering
+
+Sort `networkEdges[]` by these keys, in order:
+
+1. `srcId`
+2. `dstId`
+
+If future contracts add edge identity beyond `(srcId, dstId)`, extend ordering consistently and update fixtures with the README.
+
+### Map ordering
+
+Canonical JSON handles object key ordering, but implementations should still treat these as unordered maps:
+
+- top-level `labels`
+- `Node.labels`
+- `ResourceVector.ext`
+
+Behavioral rules:
+
+- object keys are emitted lexicographically during canonicalization
+- missing maps may be omitted
+- explicit `null` map values are not serialized
+
+### Optional fields
+
+Normalize optional fields deterministically:
+
+- omit absent fields instead of emitting `null`
+- preserve explicit boolean `false` and numeric `0`
+- keep empty strings only when they are semantically intentional in the produced payload
 
 ## Hash boundary
 
 `snapshotHash` covers the canonical JSON form of the normalized snapshot payload, including:
 
 - node capacities and free capacity
-- topology edges used for placement or scoring
-- policy-relevant labels and metadata inside the snapshot payload
+- node labels and policy-relevant node metadata
+- snapshot-wide labels and metadata that affect scheduling behavior
+- topology edges and edge metrics used for placement or scoring
 
 `snapshotHash` excludes:
 
 - the `snapshotHash` field itself
-- external raw ingestion blobs
-- transient ingestion logs or recomputation artifacts
+- external ingestion blobs
+- transient ingestion logs
+- recomputation artifacts outside the emitted snapshot payload
 
-## Unknown-reference failure behavior (fail-fast)
+## Snapshot hash rule
 
-Fail snapshot assembly and do not emit `snapshotHash` when:
+Compute `snapshotHash` exactly as follows:
 
-- a `networkEdges[].srcId` or `networkEdges[].dstId` does not reference a known `nodes[].nodeId`
-- required identifiers are missing or empty (`snapshotId`, `nodeId`, `clusterId`)
-- structural fields are malformed (for example, `nodes` or `networkEdges` is not an array)
-
-This matches `spec/snapshot-contract.md`: unknown references must fail before scheduling.
-
-## Snapshot hash rule (implementation policy)
-
-Compute `snapshotHash` as follows:
-
-1. assemble the normalized snapshot payload using protobuf JSON field names (`snapshotId`, `networkEdges`, `capacityTotal`, ...)
-2. remove `snapshotHash` from the payload to avoid self-reference
-3. canonicalize JSON per `spec/canonical-json.md`:
-   - sort object keys lexicographically
-   - emit maps with sorted keys
-   - preserve array order from normalization
-   - omit `null` object fields
-4. compute `sha256` over the UTF-8 bytes of the canonical JSON
+1. assemble the normalized snapshot payload using protobuf JSON field names such as `snapshotId`, `networkEdges`, `capacityTotal`, and `capacityFree`
+2. strip `snapshotHash` everywhere before hashing
+3. canonicalize JSON per `../../spec/canonical-json.md`
+4. hash the UTF-8 bytes of the canonical JSON with SHA-256
 5. encode the result as `sha256:<hex>`
 
-The `sha256:<hex>` prefix matches existing repository examples. If the shared contract standardizes a different algorithm or envelope later, update the README, tooling, and fixtures together.
+The current repo examples use the `sha256:` prefix, so the fixtures and helper tools enforce that representation.
+
+## Fail-fast behavior for unknown references
+
+Fail snapshot assembly before hashing and before scheduling when any of the following occurs:
+
+- `networkEdges[].srcId` does not match a known `nodes[].nodeId`
+- `networkEdges[].dstId` does not match a known `nodes[].nodeId`
+- required identifiers are missing or empty, including `snapshotId`, `nodeId`, or `clusterId`
+- `nodes` is present but is not an array
+- `networkEdges` is present but is not an array
+- a node or edge entry is present but is not an object
+
+This worktree currently treats unknown node references as the required invalid-fixture case. The root contract also mentions unknown clusters or fault domains; if future shared contracts add first-class cluster or fault-domain reference tables, extend fail-fast validation to those references too.
+
+## Deterministic implementation notes
+
+When coding the real assembler:
+
+- normalize first, hash second; never hash raw ingestion order
+- keep validation separate from canonicalization so failures are easy to explain
+- compute the hash from a copy of the snapshot object with `snapshotHash` removed
+- use protobuf JSON names, not proto snake_case names
+- keep fixture verification in sync with any contract-tightening change
 
 ## Fixtures
 
-Fixtures live in `internal/state/fixtures/` and cover:
+Fixtures live in `internal/state/fixtures/`.
 
-- mixed CPU-only and GPU nodes
-- multiple regions/zones with topology edges
-- label maps and `ResourceVector.ext` map ordering
-- invalid unknown-node-reference cases for fail-fast validation
+- `mixed_cpu_gpu.v1.snapshot.json`: valid mixed CPU/GPU snapshot with one edge
+- `topology_multi_zone.v1.snapshot.json`: valid topology-aware multi-zone snapshot with multiple edges and map-ordering coverage
+- `unknown_node_ref.v1.snapshot.invalid.json`: invalid snapshot where an edge references an unknown node and assembly must fail
 
-See `internal/state/fixtures/README.md` for fixture intent and local verification commands.
+See `internal/state/fixtures/README.md` for intent and local verification commands.

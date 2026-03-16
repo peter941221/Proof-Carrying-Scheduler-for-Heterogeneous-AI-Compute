@@ -33,12 +33,45 @@ def _compute_snapshot_hash(snapshot_payload: Any) -> str:
     return sha256_prefixed(canonical_json_bytes(without_hash))
 
 
+def _node_sort_key(node: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(node.get("clusterId") or ""),
+        str(node.get("region") or ""),
+        str(node.get("zone") or ""),
+        str(node.get("nodeId") or ""),
+    )
+
+
+def _edge_sort_key(edge: dict[str, Any]) -> tuple[str, str]:
+    return (str(edge.get("srcId") or ""), str(edge.get("dstId") or ""))
+
+
+def _check_normalized_order(snapshot_payload: dict[str, Any]) -> str | None:
+    nodes = snapshot_payload.get("nodes") or []
+    if isinstance(nodes, list):
+        sorted_nodes = sorted(nodes, key=_node_sort_key)
+        if nodes != sorted_nodes:
+            return "nodes not sorted by clusterId, region, zone, nodeId"
+
+    edges = snapshot_payload.get("networkEdges") or []
+    if isinstance(edges, list):
+        sorted_edges = sorted(edges, key=_edge_sort_key)
+        if edges != sorted_edges:
+            return "networkEdges not sorted by srcId, dstId"
+
+    return None
+
+
 def _check_snapshot_fixture(path: str) -> CheckResult:
     try:
         payload = _load_json(path)
         issues = validate_snapshot_payload(payload)
         if issues:
             return CheckResult(path=path, ok=False, message=f"validation failed: {issues[0].code} ({issues[0].message})")
+
+        ordering_issue = _check_normalized_order(payload)
+        if ordering_issue is not None:
+            return CheckResult(path=path, ok=False, message=ordering_issue)
 
         expected = payload.get("snapshotHash")
         if not expected:
