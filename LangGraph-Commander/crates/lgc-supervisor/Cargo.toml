@@ -1,0 +1,19 @@
+[package]
+name = "lgc-supervisor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sysinfo.workspace = true
+uuid.workspace = true
+wait-timeout.workspace = true
+
+lgc-core = { path = "../lgc-core" }
+lgc-provider-openai = { path = "../lgc-provider-openai" }

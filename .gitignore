@@ -14,6 +14,14 @@ proofs/AGENTS.md
 # Local reusable tooling (keep out of public repo)
 local_tools/
 
+# Public reusable orchestration framework runtime/build outputs
+LangGraph-Commander/runtime/
+LangGraph-Commander/runtime-validation/
+LangGraph-Commander/target/
+LangGraph-Commander/target-*/
+LangGraph-Commander/services/agent-room/data/
+LangGraph-Commander/**/*.jsonl
+
 # Generated Python artifacts
 __pycache__/
 *.pyc

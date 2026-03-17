@@ -7,25 +7,109 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Format-NativeArgument {
+    param(
+        [Parameter(Mandatory = $true)][string]$Value
+    )
+    if ($Value -notmatch '[\s"]') {
+        return $Value
+    }
+    $escaped = $Value -replace '(\\*)"', '$1$1\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    return '"' + $escaped + '"'
+}
+
+function Invoke-Git {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoPath,
+        [Parameter(Mandatory = $true)][string[]]$Args,
+        [int]$TimeoutSeconds = 8
+    )
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = "git"
+    $startInfo.WorkingDirectory = $RepoPath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.Arguments = (($Args | ForEach-Object { Format-NativeArgument -Value "$_" }) -join ' ')
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    [void]$process.Start()
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+        try { $process.Kill() } catch {}
+        $process.WaitForExit()
+        $exitCode = 124
+    } else {
+        $exitCode = $process.ExitCode
+    }
+    $stdoutText = $process.StandardOutput.ReadToEnd()
+    $stderrText = $process.StandardError.ReadToEnd()
+    $stdoutLines = if ($stdoutText) { @($stdoutText -split "`r?`n" | Where-Object { $_ -ne "" }) } else { @() }
+    $stderrLines = if ($stderrText) { @($stderrText -split "`r?`n" | Where-Object { $_ -ne "" }) } else { @() }
+    if ($exitCode -eq 124) {
+        $stderrLines += "git command timed out after $TimeoutSeconds seconds"
+    }
+    $lines = @($stdoutLines + $stderrLines)
+    [pscustomobject]@{
+        ExitCode = $exitCode
+        Output   = $lines
+    }
+}
+
 function Get-GitOutput {
     param(
         [Parameter(Mandatory = $true)][string]$RepoPath,
         [Parameter(Mandatory = $true)][string[]]$Args
     )
-    $out = & git -C $RepoPath @Args 2>$null
-    if ($LASTEXITCODE -ne 0) { return @() }
-    if ($null -eq $out) { return @() }
-    if ($out -is [string]) { return @($out) }
-    return @($out)
+    $result = Invoke-Git -RepoPath $RepoPath -Args $Args -TimeoutSeconds 5
+    if ($result.ExitCode -ne 0) { return @() }
+    return @($result.Output)
 }
 
 function Update-RemoteBranch {
     param(
         [Parameter(Mandatory = $true)][string]$RepoPath,
-        [Parameter(Mandatory = $true)][string]$Branch
+        [Parameter(Mandatory = $true)][string]$Branch,
+        [int]$MaxAttempts = 3
     )
-    & git -C $RepoPath fetch origin $Branch --quiet 2>$null
-    $null = $LASTEXITCODE
+    $attemptErrors = @()
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $result = Invoke-Git -RepoPath $RepoPath -Args @("fetch", "origin", $Branch, "--quiet") -TimeoutSeconds 8
+        if ($result.ExitCode -eq 0) {
+            return [pscustomobject]@{
+                Status  = "fresh"
+                Warning = $null
+                Error   = $null
+            }
+        }
+
+        $message = ($result.Output | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() }) -join " | "
+        if (-not $message) {
+            $message = "git fetch exited $($result.ExitCode)"
+        }
+        $attemptErrors += "attempt ${attempt}: $message"
+
+        if ($attempt -lt $MaxAttempts) {
+            Start-Sleep -Milliseconds (400 * $attempt)
+        }
+    }
+
+    $remoteRefCheck = Invoke-Git -RepoPath $RepoPath -Args @("show-ref", "--verify", "--quiet", "refs/remotes/origin/$Branch") -TimeoutSeconds 5
+    if ($remoteRefCheck.ExitCode -eq 0) {
+        return [pscustomobject]@{
+            Status  = "cached"
+            Warning = "remote fetch failed after $MaxAttempts attempts; using cached origin/$Branch reference"
+            Error   = $null
+        }
+    }
+
+    return [pscustomobject]@{
+        Status  = "failed"
+        Warning = $null
+        Error   = "remote fetch failed after $MaxAttempts attempts and no cached origin/$Branch reference is available :: $($attemptErrors -join ' || ')"
+    }
 }
 
 function Get-StatusValue {
@@ -102,6 +186,7 @@ $modules = @(
 )
 
 $allErrors = @()
+$allWarnings = @()
 
 Write-Host "Commander handoff check"
 Write-Host "repo: $repoRoot"
@@ -110,22 +195,38 @@ Write-Host ""
 
 foreach ($m in $modules) {
     $errors = @()
+    $warnings = @()
     $path = $m.Path
     Write-Host "== $($m.Name) =="
 
     if (-not (Test-Path $path)) {
         $errors += "worktree path missing: $path"
     } else {
-        $branch = (Get-GitOutput -RepoPath $path -Args @("branch", "--show-current") | Select-Object -First 1).Trim()
+        $branch = "$((Get-GitOutput -RepoPath $path -Args @('branch', '--show-current') | Select-Object -First 1))".Trim()
         if (-not $branch) { $errors += "not a git repo (or branch unknown): $path" }
         elseif ($branch -ne $m.Branch) { $errors += "wrong branch: expected $($m.Branch) got $branch" }
 
-        $porcelain = @(Get-GitOutput -RepoPath $path -Args @("status", "--porcelain"))
-        if ($porcelain.Count -gt 0) { $errors += "working tree not clean (commit before claiming done)" }
+        $statusResult = Invoke-Git -RepoPath $path -Args @("status", "--porcelain") -TimeoutSeconds 5
+        if ($statusResult.ExitCode -ne 0) {
+            $message = ($statusResult.Output | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() }) -join " | "
+            if (-not $message) {
+                $message = "git status exited $($statusResult.ExitCode)"
+            }
+            $errors += "unable to inspect working tree cleanliness: $message"
+        } else {
+            $porcelain = @($statusResult.Output | Where-Object { $_ -and $_.Trim() })
+            if ($porcelain.Count -gt 0) { $errors += "working tree not clean (commit before claiming done)" }
+        }
 
-        Update-RemoteBranch -RepoPath $path -Branch $m.Branch
+        $remoteState = Update-RemoteBranch -RepoPath $path -Branch $m.Branch
+        if ($remoteState.Status -eq "failed") {
+            $errors += $remoteState.Error
+        } elseif ($remoteState.Status -eq "cached") {
+            $warnings += $remoteState.Warning
+        }
 
-        $aheadBehind = (Get-GitOutput -RepoPath $path -Args @("rev-list", "--left-right", "--count", "origin/$($m.Branch)...HEAD") | Select-Object -First 1).Trim()
+        $aheadBehindSpec = "origin/$($m.Branch)...HEAD"
+        $aheadBehind = "$((Get-GitOutput -RepoPath $path -Args @('rev-list', '--left-right', '--count', $aheadBehindSpec) | Select-Object -First 1))".Trim()
         if ($aheadBehind) {
             $parts = $aheadBehind -split "\s+"
             if ($parts.Count -ge 2) {
@@ -146,8 +247,15 @@ foreach ($m in $modules) {
     }
 
     if ($errors.Count -eq 0) {
-        Write-Host "OK"
+        if ($warnings.Count -eq 0) {
+            Write-Host "OK"
+        } else {
+            foreach ($w in $warnings) { Write-Host "WARN: $w" }
+            Write-Host "OK (with warnings)"
+            $allWarnings += @($warnings | ForEach-Object { "$($m.Name): $_" })
+        }
     } else {
+        foreach ($w in $warnings) { Write-Host "WARN: $w" }
         foreach ($e in $errors) { Write-Host "FAIL: $e" }
         $allErrors += @($errors | ForEach-Object { "$($m.Name): $_" })
     }
@@ -157,6 +265,11 @@ foreach ($m in $modules) {
 if ($allErrors.Count -gt 0) {
     Write-Host "Overall: FAIL"
     exit 2
+}
+
+if ($allWarnings.Count -gt 0) {
+    Write-Host "Overall: WARN"
+    exit 0
 }
 
 Write-Host "Overall: PASS"

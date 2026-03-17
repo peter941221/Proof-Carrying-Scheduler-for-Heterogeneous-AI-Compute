@@ -30,6 +30,7 @@ This repo is prepared for a commander-and-worktrees workflow:
 - implementation modules work in isolated Git worktrees
 - verifier and proof work stay separate from the scheduler hot path
 - local-only coordination docs are intentionally ignored because the intended GitHub repo is public
+- the tracked orchestration framework now lives in `LangGraph-Commander/` and reads repo settings from `commander.toml`
 
 ## Documentation layering
 
@@ -53,3 +54,24 @@ Use the PowerShell helpers to bootstrap a fresh local clone or recreate the mult
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap-local-repo.ps1
 powershell -ExecutionPolicy Bypass -File scripts/new-module-worktree.ps1 -Module state
 ```
+
+## LangGraph-Commander
+
+The reusable Rust control plane now lives under `LangGraph-Commander/`.
+
+Common commands:
+
+```powershell
+commander
+commander status
+commander check
+```
+
+Notes:
+
+- `commander` must be started by Peter from the project root before Codex can issue `start <worker>` commands
+- the panel is now the required live monitor and emergency-stop console; closing it stops all running workers
+- default launch opens the Ratatui dashboard inline in the current terminal
+- `status`, `brief`, and `check` also work as one-shot commands when no live dashboard is running
+- `start <worker>` is hard-gated behind a live panel heartbeat and prints a fixed prompt if Peter has not opened `commander` yet
+- `stop <worker>` and `stop all` remain available as emergency controls

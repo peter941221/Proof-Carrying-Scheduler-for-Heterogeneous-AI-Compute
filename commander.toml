@@ -1,0 +1,105 @@
+framework_version = "1.2.0"
+
+[project]
+name = "Proof-Carrying-Scheduler-for-Heterogeneous-AI-Compute"
+repo_root = "."
+worktree_root = "../pcs-worktrees"
+default_phase = "bootstrap"
+
+[runtime]
+dir = "LangGraph-Commander/runtime"
+poll_interval_seconds = 5
+command_timeout_seconds = 600
+
+[ui]
+style = "hardcore-ascii"
+require_live_panel_for = ["start"]
+default_stream_scope = "all"
+default_density = "standard"
+density_persistence = "session"
+event_buffer_size = 5000
+worker_list_page_size = 100
+
+[provider]
+kind = "openai-compatible"
+model_provider = "codexmanager_gateway"
+config_path = "~/.codex/config.toml"
+default_model = "gpt-5.4-high"
+api_mode = "responses"
+
+[services.agent_room]
+enabled = false
+url = "http://127.0.0.1:7337"
+auto_start = false
+command = ["python", "local_tools/agent-room/server.py"]
+
+[phases.bootstrap]
+description = "Bootstrap / contract-freeze / module-orchestration phase"
+audit_command = ["powershell", "-ExecutionPolicy", "Bypass", "-File", "scripts/commander/check_handoffs.ps1"]
+default_start_set = ["api-spec", "state", "scheduler-evidence", "verifier-proofs"]
+
+[[phases.bootstrap.workers]]
+name = "api-spec"
+branch = "module/api-spec"
+worktree = "api-spec"
+model = "GPT-5.4-HIGH"
+auto_push = true
+max_attempts = 10
+timeout_seconds = 1800
+task_files = ["TASK.md", "api/TASK.md", "spec/TASK.md"]
+handoff_files = ["HANDOFF.md", "api/HANDOFF.md", "spec/HANDOFF.md"]
+owned_paths = ["api/", "spec/"]
+validation_commands = [
+  "protoc -I api/proto -I C:\\Users\\peter\\anaconda3\\Library\\include --descriptor_set_out=$env:TEMP\\pcs_api.desc --include_imports api/proto/pcs/v1/scheduler.proto",
+  "python -m json.tool spec/examples/decision-bundle.minimal.json > $null",
+]
+launch_command = ["python", "LangGraph-Commander/scripts/worker_bridge.py", "api-spec"]
+
+[[phases.bootstrap.workers]]
+name = "state"
+branch = "module/state"
+worktree = "state"
+model = "GPT-5.4-HIGH"
+auto_push = true
+max_attempts = 10
+timeout_seconds = 1800
+task_files = ["TASK.md", "internal/state/TASK.md"]
+handoff_files = ["HANDOFF.md", "internal/state/HANDOFF.md"]
+owned_paths = ["internal/state/"]
+validation_commands = [
+  "python -m py_compile internal/state/tools/canonical_hash.py internal/state/tools/validate_snapshot.py internal/state/tools/verify_fixtures.py",
+  "python internal/state/tools/verify_fixtures.py",
+]
+launch_command = ["python", "LangGraph-Commander/scripts/worker_bridge.py", "state"]
+
+[[phases.bootstrap.workers]]
+name = "scheduler-evidence"
+branch = "module/scheduler-evidence"
+worktree = "scheduler-evidence"
+model = "GPT-5.4-HIGH"
+auto_push = true
+max_attempts = 10
+timeout_seconds = 1800
+task_files = ["TASK.md", "internal/scheduler/TASK.md", "internal/evidence/TASK.md"]
+handoff_files = ["HANDOFF.md", "internal/scheduler/HANDOFF.md", "internal/evidence/HANDOFF.md"]
+owned_paths = ["internal/scheduler/", "internal/evidence/"]
+validation_commands = [
+  "powershell -NoLogo -NoProfile -Command \"if (Get-Command rg -ErrorAction SilentlyContinue) { rg -n 'Evidence-facing decision context|FALLBACK_CODE_NONE|DECISION_STATUS_INFEASIBLE|CERTIFICATE_LEVEL_CONFLICT' internal/scheduler internal/evidence } else { Write-Output 'rg not installed; skipped grep validation' }\"",
+]
+launch_command = ["python", "LangGraph-Commander/scripts/worker_bridge.py", "scheduler-evidence"]
+
+[[phases.bootstrap.workers]]
+name = "verifier-proofs"
+branch = "module/verifier-proofs"
+worktree = "verifier-proofs"
+model = "GPT-5.4-HIGH"
+auto_push = true
+max_attempts = 10
+timeout_seconds = 1800
+task_files = ["TASK.md", "verifier/TASK.md", "proofs/TASK.md"]
+handoff_files = ["HANDOFF.md", "verifier/HANDOFF.md", "proofs/HANDOFF.md"]
+owned_paths = ["verifier/", "proofs/"]
+validation_commands = [
+  "powershell -NoLogo -NoProfile -Command \"Write-Output 'Use markdown/link/check tooling during verifier-proofs rounds'\"",
+]
+launch_command = ["python", "LangGraph-Commander/scripts/worker_bridge.py", "verifier-proofs"]

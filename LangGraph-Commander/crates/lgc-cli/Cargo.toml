@@ -1,0 +1,18 @@
+[package]
+name = "lgc-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "lgc"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+
+lgc-core = { path = "../lgc-core" }
+lgc-supervisor = { path = "../lgc-supervisor" }
+lgc-tui = { path = "../lgc-tui" }
