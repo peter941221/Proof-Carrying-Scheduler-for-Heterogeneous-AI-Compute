@@ -46,7 +46,9 @@ Recommended synthesis order:
 2. map outcomes to claim IDs using `claim-matrix.md`
 3. emit `CHECKED` only for claims whose required stages all `passed`
 4. emit optional `PLANNED` entries for `failed`, `skipped`, or `blocked` claims with a short reason summary
-5. if any produced entry would imply stronger evidence than the stage outcome supports, emit `CLAIM.OVERSTATED_STATUS` and downgrade the claim status
+5. for `skipped` claims, pair the summary with `CLAIM.SKIPPED_STAGE` or the stage-specific `*.SKIPPED` code
+6. for `blocked` claims, point the summary at the earlier hard-stop stage and optionally emit `CLAIM.BLOCKED_STAGE`
+7. if any produced entry would imply stronger evidence than the stage outcome supports, emit `CLAIM.OVERSTATED_STATUS` and downgrade the claim status
 
 `blocked` means the stage did not run because an earlier hard-stop removed a prerequisite. `blocked` is weaker than `skipped`; both must avoid implying success.
 

@@ -49,3 +49,4 @@ proofs/claim-traceability.md      Claim -> artifact refs + status
 - append-only semantics are represented directly in the transition relation
 - assumptions that limit claim strength are recorded in a durable artifact
 - at least one simple progress condition is stated (log grows by append)
+- the proof artifacts do not imply verifier runtime `CHECKED` coverage for claims that still require implementation

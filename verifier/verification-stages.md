@@ -46,6 +46,13 @@ If a stage is intentionally skipped due to `VerifyRequest` flags, the verifier m
 - set the corresponding boolean flag to `false`
 - emit a `CLAIM.SKIPPED_STAGE` or stage-specific `INFO`/`WARNING` issue so downstream consumers do not mistake omission for success
 
+If a stage is `blocked` by an earlier hard-stop, the verifier must:
+
+- set the corresponding boolean flag to `false` if the stage owns one
+- emit the stage-specific failure cause from the earlier stage first
+- emit at most one stage-local `INFO`/`WARNING` issue only when needed to explain why a claim was downgraded or omitted
+- avoid emitting `*.SKIPPED` for blocked stages; `blocked` is not an operator choice
+
 ## `VerifyResponse` flag semantics
 
 `VerifyResponse.valid` is the aggregate truth of the verification attempt under the given `VerifyRequest` policy.

@@ -77,6 +77,7 @@ Issues related to claim reporting completeness and consistency.
 - `CLAIM.MISSING_CHECKED_CLAIMS` (WARNING): `checked_claims` empty when at least one stage ran
 - `CLAIM.UNKNOWN_CLAIM_ID` (WARNING): claim ID not in `spec/claim-taxonomy.md`
 - `CLAIM.SKIPPED_STAGE` (INFO): a stage was disabled; checked-claim status must not imply success
+- `CLAIM.BLOCKED_STAGE` (INFO): a claim-relevant stage did not run because an earlier hard-stop removed a prerequisite
 - `CLAIM.OVERSTATED_STATUS` (ERROR): a claim is marked stronger than the stage evidence supports
 
 ## `related_ids` guidance

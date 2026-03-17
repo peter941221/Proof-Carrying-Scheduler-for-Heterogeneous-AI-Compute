@@ -20,7 +20,8 @@
 
 - The current model sharpens append-only semantics by making `Append` the only allowed state transition.
 - The explicit modeling assumptions are documented in `ASSUMPTIONS.md`.
-- It does not model cryptographic collision resistance, snapshot payload contents, or any scheduler optimization semantics.
+- It does not model cryptographic collision resistance, snapshot payload contents, freshness, or any scheduler optimization semantics.
+- It supports proof-side `MODELED` statuses only; verifier-side runtime `CHECKED` statuses still depend on future implementation work under `verifier/`.
 
 ### Running (optional)
 
