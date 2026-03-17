@@ -38,6 +38,18 @@ def _edge_sort_key(edge: Any) -> tuple[str, str]:
     return (str(edge.get("srcId") or ""), str(edge.get("dstId") or ""))
 
 
+def _cluster_sort_key(cluster: Any) -> tuple[str]:
+    if not isinstance(cluster, dict):
+        return ("",)
+    return (str(cluster.get("clusterId") or ""),)
+
+
+def _fault_domain_sort_key(fault_domain: Any) -> tuple[str]:
+    if not isinstance(fault_domain, dict):
+        return ("",)
+    return (str(fault_domain.get("faultDomainId") or ""),)
+
+
 def normalize_snapshot_payload(snapshot_payload: Any) -> Any:
     if not isinstance(snapshot_payload, dict):
         raise ValueError("snapshot payload must be a JSON object")
@@ -51,6 +63,14 @@ def normalize_snapshot_payload(snapshot_payload: Any) -> Any:
     edges = normalized.get("networkEdges")
     if isinstance(edges, list):
         normalized["networkEdges"] = sorted(edges, key=_edge_sort_key)
+
+    clusters = normalized.get("clusters")
+    if isinstance(clusters, list):
+        normalized["clusters"] = sorted(clusters, key=_cluster_sort_key)
+
+    fault_domains = normalized.get("faultDomains")
+    if isinstance(fault_domains, list):
+        normalized["faultDomains"] = sorted(fault_domains, key=_fault_domain_sort_key)
 
     return normalized
 

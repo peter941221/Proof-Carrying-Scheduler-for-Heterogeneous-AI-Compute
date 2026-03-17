@@ -14,6 +14,6 @@ This worktree runs the **State** mission.
 ## Latest round
 
 - Status: ready
-- Scope completed: added `internal/state/tools/normalize_snapshot.py`, updated `internal/state/tools/verify_fixtures.py` to reuse normalization logic, and documented the normalizer workflow in `internal/state/fixtures/README.md`.
-- Validation: `python -m py_compile internal/state/tools/canonical_hash.py internal/state/tools/validate_snapshot.py internal/state/tools/normalize_snapshot.py internal/state/tools/verify_fixtures.py`; `python internal/state/tools/verify_fixtures.py`; `python internal/state/tools/normalize_snapshot.py --in internal/state/fixtures/topology_multi_zone.v1.snapshot.json --out -`
+- Scope completed: documented optional internal `clusters[]` / `faultDomains[]` anti-ghost reference tables, extended `internal/state/tools/validate_snapshot.py`, updated `internal/state/tools/normalize_snapshot.py`, and added `internal/state/fixtures/unknown_fault_domain_ref.v1.snapshot.invalid.json`.
+- Validation: `python internal/state/tools/verify_fixtures.py`; `python internal/state/tools/normalize_snapshot.py --in internal/state/fixtures/unknown_fault_domain_ref.v1.snapshot.invalid.json --out -`
 - See `internal/state/HANDOFF.md` for the detailed handoff.

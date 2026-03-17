@@ -6,24 +6,41 @@
 
 ## Summary
 
-This worker round added a small snapshot normalizer utility for future implementation and fixture authoring, then wired fixture verification to reuse that normalization logic when checking documented array ordering. The fixture docs now include the normalizer workflow so authors can reorder payloads before computing `snapshotHash`.
+This worker round closed the coordination-packet gap around ghost resources by documenting optional internal `clusters[]` and `faultDomains[]` reference tables, extending validation to enforce those references when present, and adding an invalid ghost-fault-domain fixture. The normalizer now also sorts those optional reference tables so anti-ghost validation inputs stay deterministic before hashing.
 
 ## Files changed / added (owned scope only)
 
 ```text
 internal/state/
+├─ README.md
 ├─ HANDOFF.md
 ├─ fixtures/
-│  └─ README.md
+│  ├─ README.md
+│  └─ unknown_fault_domain_ref.v1.snapshot.invalid.json
 └─ tools/
    ├─ normalize_snapshot.py
-   └─ verify_fixtures.py
+   └─ validate_snapshot.py
 ```
 
 ## Contract decisions captured in `internal/state/README.md`
 
-- No contract drift this round; the README contract remains the implementation source for payload shape, normalization order, hash boundary, and fail-fast behavior.
-- Tooling now directly reflects the documented normalization rules by reusing one helper for node and edge ordering.
+- The frozen shared contract still centers on protobuf-JSON `SnapshotMetadata` fields.
+- Optional internal `clusters[]` and `faultDomains[]` tables are documented only as local validation inputs, not as new shared wire fields.
+- When those tables are present:
+  - `nodes[].clusterId` must match `clusters[].clusterId`
+  - `nodes[].faultDomain` must match `faultDomains[].faultDomainId`
+  - unknown references fail before hashing and scheduling
+- If those tables are used during assembly, they participate in deterministic normalization and in the local snapshot hash boundary.
+
+## Hash-participating normalized fields
+
+The local state plan now names these hash-participating fields explicitly:
+
+- top-level: `snapshotId`, `version`, `snapshotTime`, `labels`, `nodes`, `networkEdges`
+- node content: `nodeId`, `clusterId`, `region`, `zone`, `faultDomain`, `spot`, `labels`, `capacityTotal`, `capacityFree`, and policy-relevant optional node metadata when present
+- edge content: `srcId`, `dstId`, `p50LatencyMs`, `p95LatencyMs`, `jitterMs`, `lossRate`, `observedAt` when present
+- optional internal reference tables: `clusters[]` and `faultDomains[]` when present and used for anti-ghost validation
+- excluded: `snapshotHash`, external ingestion blobs, transient logs, and recomputation artifacts outside the emitted payload
 
 ## Fixtures (what they cover)
 
@@ -36,31 +53,34 @@ internal/state/
 - `unknown_node_ref.v1.snapshot.invalid.json`
   - invalid fixture where an edge references an unknown node id
   - defines the required fail-fast behavior before hashing/scheduling
+- `unknown_fault_domain_ref.v1.snapshot.invalid.json`
+  - invalid fixture where a node references an undeclared fault domain from the optional internal reference table
+  - defines deterministic ghost-resource failure semantics without changing frozen shared contracts
 
 ## Validation (local)
 
 Commands run from repo root:
 
 ```powershell
-python -m py_compile internal/state/tools/canonical_hash.py internal/state/tools/validate_snapshot.py internal/state/tools/normalize_snapshot.py internal/state/tools/verify_fixtures.py
 python internal/state/tools/verify_fixtures.py
-python internal/state/tools/normalize_snapshot.py --in internal/state/fixtures/topology_multi_zone.v1.snapshot.json --out -
+python internal/state/tools/normalize_snapshot.py --in internal/state/fixtures/unknown_fault_domain_ref.v1.snapshot.invalid.json --out -
 ```
 
 Result:
 
-- PASS (`verify_fixtures.py`): 2 valid fixtures, 1 invalid fixture
-- PASS (`normalize_snapshot.py`): emits deterministically ordered JSON for a valid fixture
+- PASS (`verify_fixtures.py`): 2 valid fixtures, 2 invalid fixtures
+- PASS (`normalize_snapshot.py`): emits deterministically ordered JSON for the ghost-fault-domain invalid fixture
 
 ## Acceptance criteria check
 
 - README sufficient for implementation: YES
 - fixtures cover valid and invalid paths: YES
 - helper tooling stays scoped to normalization/hash verification: YES
-- contract drift from `spec/snapshot-contract.md`: NO drift detected
+- no contract drift from `spec/snapshot-contract.md`: YES
+- ghost-resource semantics documented and locally validated: YES
 - edits made outside `internal/state/`: NO
 
 ## Open questions / follow-ups
 
-- The root snapshot contract mentions unknown cluster and fault-domain references, but the current shared payload shape does not yet expose first-class cluster or fault-domain reference tables to validate against.
-- If a future implementation wants the helper to recompute `snapshotHash` after normalization, add that as a separate utility or explicit flag rather than silently mutating fixture hashes.
+- Ghost cluster validation is implemented in tooling when optional `clusters[]` are provided, but there is not yet a dedicated invalid cluster fixture; add one only if future rounds still need more explicit coverage.
+- If the shared contract later gains first-class cluster or fault-domain reference messages, replace the local optional tables with the frozen shared shape and realign fixtures/tooling together.

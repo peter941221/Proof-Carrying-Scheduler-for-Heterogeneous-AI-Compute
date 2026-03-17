@@ -1,0 +1,73 @@
+{
+  "clusters": [
+    {
+      "clusterId": "cluster-west"
+    }
+  ],
+  "faultDomains": [
+    {
+      "faultDomainId": "fd-1"
+    }
+  ],
+  "labels": {
+    "env": "dev",
+    "policyTier": "ha"
+  },
+  "networkEdges": [
+    {
+      "dstId": "node-west-b",
+      "p50LatencyMs": 0.2,
+      "p95LatencyMs": 0.5,
+      "srcId": "node-west-a"
+    }
+  ],
+  "nodes": [
+    {
+      "capacityFree": {
+        "acceleratorType": "",
+        "cpuCores": 32,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 128
+      },
+      "capacityTotal": {
+        "acceleratorType": "",
+        "cpuCores": 32,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 128
+      },
+      "clusterId": "cluster-west",
+      "faultDomain": "fd-1",
+      "nodeId": "node-west-a",
+      "region": "us-west1",
+      "spot": false,
+      "zone": "us-west1-a"
+    },
+    {
+      "capacityFree": {
+        "acceleratorType": "",
+        "cpuCores": 32,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 128
+      },
+      "capacityTotal": {
+        "acceleratorType": "",
+        "cpuCores": 32,
+        "gpuCount": 0,
+        "gpuMemoryGib": 0,
+        "memoryGib": 128
+      },
+      "clusterId": "cluster-west",
+      "faultDomain": "fd-ghost",
+      "nodeId": "node-west-b",
+      "region": "us-west1",
+      "spot": false,
+      "zone": "us-west1-b"
+    }
+  ],
+  "snapshotId": "snap_unknown_fault_domain_ref_v1",
+  "snapshotTime": "2026-03-15T00:00:00Z",
+  "version": 1
+}

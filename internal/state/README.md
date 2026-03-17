@@ -47,11 +47,15 @@ Required top-level fields:
 - `networkEdges[]`
 - `labels{}`
 
-Optional top-level field:
+Optional top-level fields:
 
 - `snapshotHash`
+- `clusters[]`
+- `faultDomains[]`
 
 The state module should assemble a complete normalized snapshot object, compute `snapshotHash` over the hash-covered content, then write the hash back into the emitted payload.
+
+`clusters[]` and `faultDomains[]` are internal planning aids in this worktree, not frozen shared wire-contract fields. They exist only to document and locally validate anti-ghost-resource semantics when upstream inputs include explicit reference tables.
 
 ## State-owned structures
 
@@ -113,6 +117,21 @@ Implementation guidance:
 - use protobuf JSON field names exactly
 - emit object keys in canonical order through canonical JSON, not by preserving ingestion order
 
+### Optional internal reference tables
+
+The coordination packet requires explicit ghost-resource semantics for clusters and fault domains. The shared snapshot contract does not currently expose first-class reference messages, so this worktree models them only as optional internal validation inputs:
+
+- `clusters[]` entries with `clusterId`
+- `faultDomains[]` entries with `faultDomainId`
+
+If these arrays are present during assembly or fixture validation:
+
+- every `nodes[].clusterId` must reference `clusters[].clusterId`
+- every non-empty `nodes[].faultDomain` must reference `faultDomains[].faultDomainId`
+- unknown references fail assembly before hashing
+
+If these arrays are absent, node and edge validation still runs, but cluster/fault-domain existence cannot be checked from the frozen shared payload shape alone.
+
 ## Assembly flow
 
 Implement snapshot assembly in this order:
@@ -155,6 +174,13 @@ Sort `networkEdges[]` by these keys, in order:
 
 If future contracts add edge identity beyond `(srcId, dstId)`, extend ordering consistently and update fixtures with the README.
 
+### Internal reference table ordering
+
+If optional internal reference tables are present, sort them before hashing so the same logical inventory cannot hash differently due to ingestion order:
+
+- `clusters[]` by `clusterId`
+- `faultDomains[]` by `faultDomainId`
+
 ### Map ordering
 
 Canonical JSON handles object key ordering, but implementations should still treat these as unordered maps:
@@ -185,6 +211,7 @@ Normalize optional fields deterministically:
 - node labels and policy-relevant node metadata
 - snapshot-wide labels and metadata that affect scheduling behavior
 - topology edges and edge metrics used for placement or scoring
+- optional internal reference tables if they are present during assembly and used to validate anti-ghost-resource constraints
 
 `snapshotHash` excludes:
 
@@ -211,12 +238,14 @@ Fail snapshot assembly before hashing and before scheduling when any of the foll
 
 - `networkEdges[].srcId` does not match a known `nodes[].nodeId`
 - `networkEdges[].dstId` does not match a known `nodes[].nodeId`
+- `nodes[].clusterId` does not match a known `clusters[].clusterId` when `clusters[]` is present
+- `nodes[].faultDomain` does not match a known `faultDomains[].faultDomainId` when `faultDomains[]` is present
 - required identifiers are missing or empty, including `snapshotId`, `nodeId`, or `clusterId`
 - `nodes` is present but is not an array
 - `networkEdges` is present but is not an array
-- a node or edge entry is present but is not an object
+- a node, edge, cluster, or fault-domain entry is present but is not an object
 
-This worktree currently treats unknown node references as the required invalid-fixture case. The root contract also mentions unknown clusters or fault domains; if future shared contracts add first-class cluster or fault-domain reference tables, extend fail-fast validation to those references too.
+This keeps the worktree aligned with `spec/snapshot-contract.md` while staying inside the current shared-contract freeze: ghost cluster and fault-domain checks are implemented only when local inputs provide explicit reference tables.
 
 ## Deterministic implementation notes
 
@@ -226,6 +255,7 @@ When coding the real assembler:
 - keep validation separate from canonicalization so failures are easy to explain
 - compute the hash from a copy of the snapshot object with `snapshotHash` removed
 - use protobuf JSON names, not proto snake_case names
+- if local reference tables are used for anti-ghost checks, normalize and hash them consistently with the rest of the payload
 - keep fixture verification in sync with any contract-tightening change
 
 ## Fixtures
@@ -235,5 +265,6 @@ Fixtures live in `internal/state/fixtures/`.
 - `mixed_cpu_gpu.v1.snapshot.json`: valid mixed CPU/GPU snapshot with one edge
 - `topology_multi_zone.v1.snapshot.json`: valid topology-aware multi-zone snapshot with multiple edges and map-ordering coverage
 - `unknown_node_ref.v1.snapshot.invalid.json`: invalid snapshot where an edge references an unknown node and assembly must fail
+- `unknown_fault_domain_ref.v1.snapshot.invalid.json`: invalid snapshot where a node references a fault domain missing from the optional internal reference table
 
 See `internal/state/fixtures/README.md` for intent and local verification commands.

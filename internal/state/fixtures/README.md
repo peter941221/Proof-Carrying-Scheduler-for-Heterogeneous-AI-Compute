@@ -7,6 +7,8 @@ Fixtures in this directory are intentionally small, deterministic examples for s
 - `*.snapshot.json`: valid snapshot payloads aligned to protobuf JSON names from `api/proto/pcs/v1/scheduler.proto`
 - `*.snapshot.invalid.json`: intentionally invalid payloads that must fail assembly before hashing or scheduling
 
+Some invalid fixtures also carry optional internal reference tables (`clusters[]`, `faultDomains[]`) so the state worktree can validate anti-ghost-resource behavior without changing frozen shared contracts.
+
 ## Fixture list
 
 - `mixed_cpu_gpu.v1.snapshot.json`
@@ -20,6 +22,9 @@ Fixtures in this directory are intentionally small, deterministic examples for s
 - `unknown_node_ref.v1.snapshot.invalid.json`
   - invalid fixture where `networkEdges[].dstId` references an unknown node
   - defines the required fail-fast behavior before hashing and before scheduling
+- `unknown_fault_domain_ref.v1.snapshot.invalid.json`
+  - invalid fixture where `nodes[].faultDomain` references an undeclared fault domain
+  - includes `faultDomains[]` to make the ghost-resource failure deterministic and explicit
 
 ## What verification checks
 
@@ -45,6 +50,8 @@ The normalizer:
 - drops `null` object fields
 - sorts `nodes[]` by `clusterId`, `region`, `zone`, `nodeId`
 - sorts `networkEdges[]` by `srcId`, `dstId`
+- sorts optional `clusters[]` by `clusterId`
+- sorts optional `faultDomains[]` by `faultDomainId`
 
 ## Verify locally
 
