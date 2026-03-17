@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -17,12 +17,14 @@ use lgc_core::runtime::{
 };
 use lgc_provider_openai::{ProviderProfile, load_profile};
 use reqwest::blocking::Client;
+use serde::Deserialize;
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use uuid::Uuid;
 use wait_timeout::ChildExt;
 
 const CONTROL_STALE_SECONDS: f64 = 8.0;
 const REMOTE_POLL_MILLIS: u64 = 350;
+const WORKER_PROGRESS_PREFIX: &str = "__LGC_PROGRESS__";
 
 #[derive(Debug, Clone, Default)]
 pub struct SnapshotBundle {
@@ -79,6 +81,18 @@ struct UiState {
 
 struct ManagedWorker {
     child: Child,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct WorkerProgressPayload {
+    source: String,
+    level: String,
+    channel: String,
+    worker_name: String,
+    message: String,
+    current_activity: String,
+    tags: Vec<String>,
 }
 
 pub struct CommandOutcome {
@@ -202,7 +216,8 @@ pub fn read_runtime_snapshot(config_path: impl AsRef<Path>) -> Result<SnapshotBu
     let patrol = runtime
         .read_json::<PatrolStatus>(&runtime.patrol_file)?
         .unwrap_or_default();
-    let coordination = runtime.read_json::<CoordinationSnapshot>(&runtime.coordination_state_file)?;
+    let coordination =
+        runtime.read_json::<CoordinationSnapshot>(&runtime.coordination_state_file)?;
     let control = running_control_state(&runtime)?;
     let provider = load_profile(config.provider_config_path().as_deref())?;
     Ok(SnapshotBundle {
@@ -435,7 +450,10 @@ impl SupervisorInner {
             state.patrol.updated_at = now_string();
             state.patrol.phase = state.current_phase.clone();
             state.patrol.activation_required = state.status.activation_required;
-            if state.status.last_check_status.eq_ignore_ascii_case("warning")
+            if state
+                .status
+                .last_check_status
+                .eq_ignore_ascii_case("warning")
                 && !state.status.last_check_warning.trim().is_empty()
             {
                 state.patrol.summary =
@@ -454,15 +472,14 @@ impl SupervisorInner {
             .map_err(|_| anyhow!("supervisor state poisoned"))?;
         self.runtime
             .write_json(&self.runtime.status_file, &state.status)?;
-        self.runtime
-            .write_text(
-                &self.runtime.brief_file,
-                &state.status.render_brief(
-                    self.runtime
-                        .read_json::<CoordinationSnapshot>(&self.runtime.coordination_state_file)?
-                        .as_ref(),
-                ),
-            )?;
+        self.runtime.write_text(
+            &self.runtime.brief_file,
+            &state.status.render_brief(
+                self.runtime
+                    .read_json::<CoordinationSnapshot>(&self.runtime.coordination_state_file)?
+                    .as_ref(),
+            ),
+        )?;
         self.runtime
             .write_json(&self.runtime.patrol_file, &state.patrol)?;
         if let Some(control) = self.control_snapshot_for(&state) {
@@ -636,15 +653,43 @@ impl SupervisorInner {
     }
 
     fn handle_coordination_command(&self, args: &[&str]) -> Result<String> {
+        let label = format!("coordination {}", args.join(" "));
+        self.log(
+            "commander",
+            "info",
+            "coordination",
+            "",
+            format!("{label}: started"),
+        );
         let mut command = vec![
             "python".to_string(),
             "LangGraph-Commander/scripts/coordination_bridge.py".to_string(),
         ];
         command.extend(args.iter().map(|item| item.to_string()));
-        let output = run_command(
+        let started = Instant::now();
+        let progress_label = args.join(" ");
+        let output = run_command_streaming(
             &command,
             &self.config.repo_root(),
             Duration::from_secs(self.config.runtime.command_timeout_seconds.max(60)),
+            |line| {
+                self.log(
+                    "commander",
+                    "info",
+                    "coordination",
+                    "",
+                    format!("{progress_label} | {line}"),
+                );
+            },
+            |line| {
+                self.log(
+                    "commander",
+                    "warning",
+                    "coordination",
+                    "",
+                    format!("{progress_label} | {line}"),
+                );
+            },
         )?;
         if output.exit_code != 0 {
             bail!(
@@ -653,11 +698,12 @@ impl SupervisorInner {
                 output.output
             );
         }
-        Ok(if output.output.trim().is_empty() {
-            format!("coordination {}", args.join(" "))
-        } else {
-            output.output
-        })
+        let elapsed = started.elapsed();
+        Ok(format_coordination_result(
+            &label,
+            elapsed,
+            output.output.trim(),
+        ))
     }
 
     fn handle_patrol(&self, mode: &str) -> Result<String> {
@@ -851,6 +897,7 @@ impl SupervisorInner {
                 state.status = "missing".to_string();
                 state.last_error = message.clone();
                 state.last_summary = message.clone();
+                state.current_activity = "worktree missing".to_string();
             })?;
             self.log("commander", "error", "worker", &worker.name, &message);
             return Ok(message);
@@ -867,16 +914,22 @@ impl SupervisorInner {
                 state.execution_scope = "manual".to_string();
                 state.last_summary = message.clone();
                 state.last_error.clear();
+                state.current_activity = "manual activation required".to_string();
             })?;
             self.log("commander", "warning", "worker", &worker.name, &message);
             return Ok(message);
         }
-        if thread_state.launch_blocked || pending_action_blocks_start(&thread_state.pending_action) {
+        if thread_state.launch_blocked || pending_action_blocks_start(&thread_state.pending_action)
+        {
             let message = format!(
                 "{} start blocked: {}",
-                worker.name,
-                thread_state.pending_action
+                worker.name, thread_state.pending_action
             );
+            self.update_thread_state(worker, |state| {
+                if !thread_state.pending_action.trim().is_empty() {
+                    state.current_activity = thread_state.pending_action.clone();
+                }
+            })?;
             self.log("commander", "warning", "worker", &worker.name, &message);
             return Ok(message);
         }
@@ -961,6 +1014,7 @@ impl SupervisorInner {
             thread_state.last_exit_code = None;
             thread_state.last_summary = format!("running {}", worker.launch_command.join(" "));
             thread_state.last_error.clear();
+            thread_state.current_activity = "starting worker round".to_string();
             thread_state.launch_blocked = false;
         })?;
 
@@ -990,6 +1044,7 @@ impl SupervisorInner {
                 } else {
                     output.output.clone()
                 };
+                state.current_activity = "stopped".to_string();
                 state.pid = None;
             })?;
             self.log("commander", "warning", "worker", &worker.name, &message);
@@ -1023,6 +1078,7 @@ impl SupervisorInner {
             thread_state.last_exit_code = Some(130);
             thread_state.last_summary = message.clone();
             thread_state.last_error.clear();
+            thread_state.current_activity = "stopped".to_string();
         })?;
         self.log("commander", "warning", "worker", &worker.name, &message);
         Ok(message)
@@ -1141,6 +1197,7 @@ impl SupervisorInner {
             last_finished_at: thread_state.last_finished_at,
             last_summary: thread_state.last_summary,
             last_error: thread_state.last_error,
+            current_activity: thread_state.current_activity,
             pending_action: thread_state.pending_action,
             launch_blocked: thread_state.launch_blocked,
             execution_scope: thread_state.execution_scope,
@@ -1163,6 +1220,7 @@ impl SupervisorInner {
                 last_exit_code: None,
                 last_summary: "Waiting for first command.".to_string(),
                 last_error: String::new(),
+                current_activity: String::new(),
                 pending_action: String::new(),
                 launch_blocked: false,
                 execution_scope: String::new(),
@@ -1191,7 +1249,14 @@ impl SupervisorInner {
     }
 
     fn reconcile_worker_processes(&self) -> Result<()> {
-        let phase = self.active_phase()?;
+        let phase_name = {
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| anyhow!("supervisor state poisoned"))?;
+            state.current_phase.clone()
+        };
+        let phase = self.config.phase(&phase_name)?.clone();
         let mut finished = Vec::new();
         {
             let mut state = self
@@ -1212,18 +1277,27 @@ impl SupervisorInner {
         }
 
         for (worker, code) in finished {
+            let existing = self.load_thread_state(&worker.name, &phase_name)?;
             let status_label = if code == 0 { "finished" } else { "failed" };
             self.update_thread_state(&worker, |thread_state| {
                 thread_state.status = status_label.to_string();
                 thread_state.pid = None;
                 thread_state.last_exit_code = Some(code);
                 thread_state.last_finished_at = Some(now_string());
-                thread_state.last_summary = format!("{status_label} with exit code {code}");
+                thread_state.last_summary = if code == 0 && !existing.last_summary.trim().is_empty()
+                {
+                    existing.last_summary.clone()
+                } else {
+                    format!("{status_label} with exit code {code}")
+                };
                 thread_state.last_error = if code == 0 {
                     String::new()
+                } else if !existing.last_error.trim().is_empty() {
+                    existing.last_error.clone()
                 } else {
                     format!("worker process exited with code {code}")
                 };
+                thread_state.current_activity = status_label.to_string();
             })?;
             self.log(
                 "worker",
@@ -1407,9 +1481,29 @@ impl SupervisorInner {
 
     fn shutdown(&self) -> Result<()> {
         self.stop_flag.store(true, Ordering::Relaxed);
-        if let Ok(phase) = self.active_phase() {
-            for worker in &phase.workers {
-                let _ = self.stop_worker(worker);
+        let _ = self.reconcile_worker_processes();
+        let phase_name = {
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| anyhow!("supervisor state poisoned"))?;
+            state.current_phase.clone()
+        };
+        let workers_to_stop = {
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| anyhow!("supervisor state poisoned"))?;
+            state.worker_processes.keys().cloned().collect::<Vec<_>>()
+        };
+        for worker_name in workers_to_stop {
+            if let Ok(worker) = self.find_worker(&worker_name) {
+                if let Ok(thread_state) = self.load_thread_state(&worker.name, &phase_name) {
+                    if worker_status_terminal(&thread_state.status) {
+                        continue;
+                    }
+                }
+                let _ = self.stop_worker(&worker);
             }
         }
         if self.session_id.is_some() {
@@ -1463,6 +1557,13 @@ fn reasoning_effort_label(model_name: &str) -> String {
     } else {
         "standard".to_string()
     }
+}
+
+fn worker_status_terminal(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "finished" | "failed" | "stopped" | "missing"
+    )
 }
 
 fn workspace_root() -> PathBuf {
@@ -1556,6 +1657,143 @@ fn run_command(command: &[String], cwd: &Path, timeout: Duration) -> Result<Comm
             text.push('\n');
         }
         text.push_str(&String::from_utf8_lossy(&output.stderr));
+    }
+    Ok(CommandOutput {
+        exit_code: status.code().unwrap_or(1),
+        output: text.trim().to_string(),
+    })
+}
+
+fn run_command_streaming(
+    command: &[String],
+    cwd: &Path,
+    timeout: Duration,
+    mut on_stdout: impl FnMut(&str),
+    mut on_stderr: impl FnMut(&str),
+) -> Result<CommandOutput> {
+    if command.is_empty() {
+        bail!("cannot run empty command");
+    }
+    let mut child = Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(cwd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to start {}", command.join(" ")))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("failed to capture stdout for {}", command.join(" ")))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow!("failed to capture stderr for {}", command.join(" ")))?;
+
+    #[derive(Debug)]
+    enum StreamPacket {
+        Stdout(String),
+        Stderr(String),
+        Done { stderr: bool },
+    }
+
+    fn spawn_stream_reader<R>(reader: R, sender: mpsc::Sender<StreamPacket>, stderr: bool)
+    where
+        R: Read + Send + 'static,
+    {
+        thread::spawn(move || {
+            let buffered = BufReader::new(reader);
+            for line in buffered.lines() {
+                match line {
+                    Ok(line) => {
+                        let message = if stderr {
+                            StreamPacket::Stderr(line)
+                        } else {
+                            StreamPacket::Stdout(line)
+                        };
+                        let _ = sender.send(message);
+                    }
+                    Err(error) => {
+                        let _ = sender.send(StreamPacket::Stderr(format!(
+                            "{} stream read failed: {error}",
+                            if stderr { "stderr" } else { "stdout" }
+                        )));
+                        break;
+                    }
+                }
+            }
+            let _ = sender.send(StreamPacket::Done { stderr });
+        });
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    spawn_stream_reader(stdout, sender.clone(), false);
+    spawn_stream_reader(stderr, sender.clone(), true);
+    drop(sender);
+
+    let started = Instant::now();
+    let mut stdout_done = false;
+    let mut stderr_done = false;
+    let mut status = None;
+    let mut stdout_lines = Vec::new();
+    let mut stderr_lines = Vec::new();
+
+    while !(stdout_done && stderr_done && status.is_some()) {
+        if status.is_none() && started.elapsed() > timeout {
+            child.kill()?;
+            let _ = child.wait();
+            bail!(
+                "command timed out after {}s: {}",
+                timeout.as_secs(),
+                command.join(" ")
+            );
+        }
+
+        match receiver.recv_timeout(Duration::from_millis(100)) {
+            Ok(StreamPacket::Stdout(line)) => {
+                let line = line.trim_end().to_string();
+                if !line.is_empty() {
+                    on_stdout(&line);
+                    stdout_lines.push(line);
+                }
+            }
+            Ok(StreamPacket::Stderr(line)) => {
+                let line = line.trim_end().to_string();
+                if !line.is_empty() {
+                    on_stderr(&line);
+                    stderr_lines.push(line);
+                }
+            }
+            Ok(StreamPacket::Done { stderr }) => {
+                if stderr {
+                    stderr_done = true;
+                } else {
+                    stdout_done = true;
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                stdout_done = true;
+                stderr_done = true;
+            }
+        }
+
+        if status.is_none() {
+            status = child.try_wait()?;
+        }
+    }
+
+    let status = match status {
+        Some(status) => status,
+        None => child.wait()?,
+    };
+    let mut text = stdout_lines.join("\n");
+    if !stderr_lines.is_empty() {
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        text.push_str(&stderr_lines.join("\n"));
     }
     Ok(CommandOutput {
         exit_code: status.code().unwrap_or(1),
@@ -1671,7 +1909,10 @@ fn determine_activation(
 ) -> (bool, String) {
     if let Some(coordination) = coordination {
         if !coordination.approved {
-            return (true, "coordination DAG approval is still pending".to_string());
+            return (
+                true,
+                "coordination DAG approval is still pending".to_string(),
+            );
         }
         let open_escalations = coordination.open_escalations();
         if !open_escalations.is_empty() {
@@ -1680,7 +1921,11 @@ fn determine_activation(
                 .take(2)
                 .map(|item| item.title.as_str())
                 .collect::<Vec<_>>();
-            let suffix = if open_escalations.len() > 2 { " ..." } else { "" };
+            let suffix = if open_escalations.len() > 2 {
+                " ..."
+            } else {
+                ""
+            };
             return (
                 true,
                 format!(
@@ -1698,11 +1943,20 @@ fn determine_activation(
     if last_check_status.eq_ignore_ascii_case("blocked") {
         return (true, "handoff audit failed".to_string());
     }
-    let blocked_workers = workers.iter().filter(|worker| worker.launch_blocked).count();
+    let blocked_workers = workers
+        .iter()
+        .filter(|worker| worker.launch_blocked)
+        .count();
     if blocked_workers > 0 && blocked_workers == workers.len() {
-        return (true, "all workers are blocked by coordination policy".to_string());
+        return (
+            true,
+            "all workers are blocked by coordination policy".to_string(),
+        );
     }
-    if workers.iter().any(|worker| pending_action_needs_attention(worker)) {
+    if workers
+        .iter()
+        .any(|worker| pending_action_needs_attention(worker))
+    {
         return (true, "coordination follow-up required".to_string());
     }
     if workers.iter().any(|worker| !worker.git_clean) {
@@ -1754,7 +2008,8 @@ fn control_supports_command(control: &ControlSnapshot, command: &str) -> bool {
         .unwrap_or_default()
         .trim();
     control.supported_commands.iter().any(|entry| {
-        entry.trim()
+        entry
+            .trim()
             .to_ascii_lowercase()
             .split_whitespace()
             .next()
@@ -1835,18 +2090,15 @@ fn load_activity_buffer(
     runtime: &RuntimeLayout,
     limit: usize,
 ) -> Result<(Vec<ActivityEntry>, u64)> {
-    let mut entries = runtime.read_json_lines::<ActivityEntry>(&runtime.event_stream_file)?;
-    if entries.len() > limit {
-        let drain = entries.len() - limit;
-        entries.drain(0..drain);
-    }
-
+    let entries = runtime.read_json_lines::<ActivityEntry>(&runtime.event_stream_file)?;
+    let mut compacted = Vec::new();
     let mut next_seq = 1;
-    for entry in &mut entries {
-        normalize_activity_entry(entry, &mut next_seq);
+    for mut entry in entries {
+        normalize_activity_entry(&mut entry, &mut next_seq);
+        push_activity_entry(&mut compacted, entry, limit);
     }
 
-    Ok((entries, next_seq))
+    Ok((compacted, next_seq))
 }
 
 fn append_activity(
@@ -1867,6 +2119,7 @@ fn append_activity(
             .map_err(|_| anyhow!("supervisor state poisoned"))?;
         let mut entry = ActivityEntry {
             seq: guard.next_activity_seq,
+            repeat_count: 1,
             timestamp: now_string(),
             source: source.to_string(),
             level: level.to_string(),
@@ -1878,11 +2131,7 @@ fn append_activity(
             tags,
         };
         normalize_activity_entry(&mut entry, &mut guard.next_activity_seq);
-        guard.activity.push(entry.clone());
-        if guard.activity.len() > buffer_limit {
-            let drain = guard.activity.len() - buffer_limit;
-            guard.activity.drain(0..drain);
-        }
+        push_activity_entry(&mut guard.activity, entry.clone(), buffer_limit);
         guard.status.recent_activity = guard.activity.clone();
         entry
     };
@@ -1896,6 +2145,9 @@ fn normalize_activity_entry(entry: &mut ActivityEntry, next_seq: &mut u64) {
         entry.seq = *next_seq;
     }
     *next_seq = (*next_seq).max(entry.seq.saturating_add(1));
+    if entry.repeat_count == 0 {
+        entry.repeat_count = 1;
+    }
     if entry.timestamp.trim().is_empty() {
         entry.timestamp = now_string();
     }
@@ -1919,6 +2171,51 @@ fn normalize_activity_entry(entry: &mut ActivityEntry, next_seq: &mut u64) {
     }
     if entry.full_message.trim().is_empty() {
         entry.full_message = entry.message.clone();
+    }
+}
+
+fn push_activity_entry(buffer: &mut Vec<ActivityEntry>, entry: ActivityEntry, limit: usize) {
+    if let Some(last) = buffer.last_mut() {
+        if activity_entries_mergeable(last, &entry) {
+            merge_activity_entry(last, &entry);
+        } else {
+            buffer.push(entry);
+        }
+    } else {
+        buffer.push(entry);
+    }
+
+    if buffer.len() > limit {
+        let drain = buffer.len() - limit;
+        buffer.drain(0..drain);
+    }
+}
+
+fn activity_entries_mergeable(left: &ActivityEntry, right: &ActivityEntry) -> bool {
+    left.source == right.source
+        && left.level == right.level
+        && left.channel == right.channel
+        && left.worker_name == right.worker_name
+        && left.message == right.message
+        && left.dense_message == right.dense_message
+        && left.full_message == right.full_message
+        && left.tags == right.tags
+}
+
+fn merge_activity_entry(target: &mut ActivityEntry, incoming: &ActivityEntry) {
+    target.seq = incoming.seq;
+    target.timestamp = incoming.timestamp.clone();
+    target.repeat_count = target
+        .repeat_count
+        .saturating_add(incoming.repeat_count.max(1));
+}
+
+fn format_coordination_result(label: &str, elapsed: Duration, output: &str) -> String {
+    let elapsed_seconds = elapsed.as_secs_f32();
+    if output.trim().is_empty() {
+        format!("{label} completed in {elapsed_seconds:.1}s")
+    } else {
+        format!("{label} completed in {elapsed_seconds:.1}s\n{output}")
     }
 }
 
@@ -1951,7 +2248,42 @@ fn spawn_activity_reader<R>(
                     if line.is_empty() {
                         continue;
                     }
+                    if let Some(progress) = parse_worker_progress(&line, &worker_name) {
+                        let mut tags = progress.tags;
+                        if !tags.iter().any(|tag| tag.eq_ignore_ascii_case("worker")) {
+                            tags.push("worker".to_string());
+                        }
+                        if !tags
+                            .iter()
+                            .any(|tag| tag.eq_ignore_ascii_case(&worker_name))
+                        {
+                            tags.push(worker_name.clone());
+                        }
+                        if !tags
+                            .iter()
+                            .any(|tag| tag.eq_ignore_ascii_case(&progress.channel))
+                        {
+                            tags.push(progress.channel.clone());
+                        }
+                        let _ = append_activity(
+                            &state,
+                            &runtime,
+                            buffer_limit,
+                            &progress.source,
+                            &progress.level,
+                            &progress.channel,
+                            &progress.worker_name,
+                            progress.message,
+                            tags,
+                        );
+                        continue;
+                    }
                     let tags = vec!["worker".to_string(), worker_name.clone(), channel.clone()];
+                    if channel.eq_ignore_ascii_case("stdout")
+                        && !is_worker_bridge_stdout(&line, &worker_name)
+                    {
+                        let _ = update_worker_activity_from_stream(&runtime, &worker_name, &line);
+                    }
                     let _ = append_activity(
                         &state,
                         &runtime,
@@ -1987,6 +2319,85 @@ fn spawn_activity_reader<R>(
     });
 }
 
+fn update_worker_activity_from_stream(
+    runtime: &RuntimeLayout,
+    worker_name: &str,
+    activity: &str,
+) -> Result<()> {
+    let activity = densify_message(activity.trim());
+    if activity.is_empty() {
+        return Ok(());
+    }
+
+    let path = runtime.worker_thread_state_file(worker_name);
+    let mut thread_state = runtime
+        .read_json::<WorkerThreadState>(&path)?
+        .unwrap_or_else(|| WorkerThreadState {
+            worker_name: worker_name.to_string(),
+            phase: String::new(),
+            status: "running".to_string(),
+            pid: None,
+            last_started_at: None,
+            last_finished_at: None,
+            last_exit_code: None,
+            last_summary: String::new(),
+            last_error: String::new(),
+            current_activity: String::new(),
+            pending_action: String::new(),
+            launch_blocked: false,
+            execution_scope: String::new(),
+        });
+
+    if thread_state.worker_name.trim().is_empty() {
+        thread_state.worker_name = worker_name.to_string();
+    }
+
+    let status = thread_state.status.trim();
+    if !status.is_empty() && !status.eq_ignore_ascii_case("running") {
+        return Ok(());
+    }
+    if status.is_empty() {
+        thread_state.status = "running".to_string();
+    }
+    if thread_state.current_activity == activity {
+        return Ok(());
+    }
+
+    thread_state.current_activity = activity;
+    runtime.write_json(&path, &thread_state)
+}
+
+fn is_worker_bridge_stdout(line: &str, worker_name: &str) -> bool {
+    let line = line.trim();
+    !worker_name.trim().is_empty()
+        && line.starts_with("20")
+        && line.contains(&format!("[{}]", worker_name.trim()))
+}
+
+fn parse_worker_progress(line: &str, default_worker_name: &str) -> Option<WorkerProgressPayload> {
+    let payload = line.strip_prefix(WORKER_PROGRESS_PREFIX)?.trim();
+    let mut parsed = serde_json::from_str::<WorkerProgressPayload>(payload).ok()?;
+    if parsed.worker_name.trim().is_empty() {
+        parsed.worker_name = default_worker_name.to_string();
+    }
+    if parsed.source.trim().is_empty() {
+        parsed.source = parsed.worker_name.clone();
+    }
+    if parsed.level.trim().is_empty() {
+        parsed.level = "info".to_string();
+    }
+    if parsed.channel.trim().is_empty() {
+        parsed.channel = "progress".to_string();
+    }
+    if parsed.message.trim().is_empty() {
+        parsed.message = parsed.current_activity.clone();
+    }
+    if parsed.message.trim().is_empty() {
+        parsed.message = "progress update".to_string();
+    }
+    Some(parsed)
+}
+
 fn command_matches_gate(gates: &[String], command: &str) -> bool {
     let Some(head) = command.split_whitespace().next() else {
         return false;
@@ -1998,4 +2409,188 @@ fn command_matches_gate(gates: &[String], command: &str) -> bool {
 
 fn canonicalize_path(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_runtime_root(label: &str) -> std::path::PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "lgc-supervisor-{label}-{}-{suffix}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn push_activity_entry_merges_consecutive_duplicates() {
+        let mut buffer = Vec::new();
+        let first = ActivityEntry {
+            seq: 1,
+            repeat_count: 1,
+            timestamp: "2026-03-17 10:00:00".to_string(),
+            source: "patrol".to_string(),
+            level: "info".to_string(),
+            channel: "audit".to_string(),
+            worker_name: String::new(),
+            message: "handoff audit PASS (exit 0)".to_string(),
+            dense_message: "handoff audit PASS (exit 0)".to_string(),
+            full_message: "handoff audit PASS (exit 0)".to_string(),
+            tags: vec!["patrol".to_string(), "audit".to_string()],
+        };
+        let second = ActivityEntry {
+            seq: 2,
+            repeat_count: 1,
+            timestamp: "2026-03-17 10:00:15".to_string(),
+            ..first.clone()
+        };
+
+        push_activity_entry(&mut buffer, first, 100);
+        push_activity_entry(&mut buffer, second, 100);
+
+        assert_eq!(buffer.len(), 1);
+        assert_eq!(buffer[0].repeat_count, 2);
+        assert_eq!(buffer[0].seq, 2);
+        assert_eq!(buffer[0].timestamp, "2026-03-17 10:00:15");
+    }
+
+    #[test]
+    fn push_activity_entry_keeps_distinct_messages_separate() {
+        let mut buffer = Vec::new();
+        push_activity_entry(
+            &mut buffer,
+            ActivityEntry {
+                seq: 1,
+                repeat_count: 1,
+                timestamp: "2026-03-17 10:00:00".to_string(),
+                source: "patrol".to_string(),
+                level: "info".to_string(),
+                channel: "audit".to_string(),
+                worker_name: String::new(),
+                message: "handoff audit PASS (exit 0)".to_string(),
+                dense_message: "handoff audit PASS (exit 0)".to_string(),
+                full_message: "handoff audit PASS (exit 0)".to_string(),
+                tags: vec!["patrol".to_string(), "audit".to_string()],
+            },
+            100,
+        );
+        push_activity_entry(
+            &mut buffer,
+            ActivityEntry {
+                seq: 2,
+                repeat_count: 1,
+                timestamp: "2026-03-17 10:00:15".to_string(),
+                source: "patrol".to_string(),
+                level: "warning".to_string(),
+                channel: "audit".to_string(),
+                worker_name: String::new(),
+                message: "audit warning: cached origin ref used".to_string(),
+                dense_message: "audit warning: cached origin ref used".to_string(),
+                full_message: "audit warning: cached origin ref used".to_string(),
+                tags: vec!["patrol".to_string(), "audit".to_string()],
+            },
+            100,
+        );
+
+        assert_eq!(buffer.len(), 2);
+        assert_eq!(buffer[0].repeat_count, 1);
+        assert_eq!(buffer[1].repeat_count, 1);
+    }
+
+    #[test]
+    fn format_coordination_result_includes_elapsed_time() {
+        let rendered = format_coordination_result(
+            "coordination report",
+            Duration::from_millis(1750),
+            "report updated",
+        );
+        assert!(rendered.contains("coordination report completed in 1.8s"));
+        assert!(rendered.contains("report updated"));
+    }
+
+    #[test]
+    fn stdout_updates_running_worker_current_activity() {
+        let root = temp_runtime_root("stdout-activity");
+        let runtime = RuntimeLayout::new(&root);
+        runtime.ensure_dirs().unwrap();
+        let path = runtime.worker_thread_state_file("dummy");
+        runtime
+            .write_json(
+                &path,
+                &WorkerThreadState {
+                    worker_name: "dummy".to_string(),
+                    phase: "bootstrap".to_string(),
+                    status: "running".to_string(),
+                    pid: Some(1234),
+                    last_started_at: None,
+                    last_finished_at: None,
+                    last_exit_code: None,
+                    last_summary: String::new(),
+                    last_error: String::new(),
+                    current_activity: "starting worker round".to_string(),
+                    pending_action: String::new(),
+                    launch_blocked: false,
+                    execution_scope: String::new(),
+                },
+            )
+            .unwrap();
+
+        update_worker_activity_from_stream(&runtime, "dummy", "cargo test --quiet").unwrap();
+
+        let updated = runtime
+            .read_json::<WorkerThreadState>(&path)
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.status, "running");
+        assert_eq!(updated.current_activity, "cargo test --quiet");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn stdout_does_not_override_terminal_worker_state() {
+        let root = temp_runtime_root("stdout-terminal-guard");
+        let runtime = RuntimeLayout::new(&root);
+        runtime.ensure_dirs().unwrap();
+        let path = runtime.worker_thread_state_file("dummy");
+        runtime
+            .write_json(
+                &path,
+                &WorkerThreadState {
+                    worker_name: "dummy".to_string(),
+                    phase: "bootstrap".to_string(),
+                    status: "finished".to_string(),
+                    pid: None,
+                    last_started_at: None,
+                    last_finished_at: Some("2026-03-17 14:10:00".to_string()),
+                    last_exit_code: Some(0),
+                    last_summary: "finished".to_string(),
+                    last_error: String::new(),
+                    current_activity: "finished".to_string(),
+                    pending_action: String::new(),
+                    launch_blocked: false,
+                    execution_scope: String::new(),
+                },
+            )
+            .unwrap();
+
+        update_worker_activity_from_stream(&runtime, "dummy", "post-exit trailing stdout").unwrap();
+
+        let updated = runtime
+            .read_json::<WorkerThreadState>(&path)
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.status, "finished");
+        assert_eq!(updated.current_activity, "finished");
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }

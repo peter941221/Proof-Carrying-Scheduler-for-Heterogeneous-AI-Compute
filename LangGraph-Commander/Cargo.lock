@@ -830,6 +830,7 @@ dependencies = [
  "lgc-core",
  "lgc-supervisor",
  "lgc-tui",
+ "serde_json",
 ]
 
 [[package]]

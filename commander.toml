@@ -13,7 +13,7 @@ command_timeout_seconds = 600
 
 [ui]
 style = "hardcore-ascii"
-require_live_panel_for = ["start"]
+require_live_panel_for = []
 default_stream_scope = "all"
 default_density = "standard"
 density_persistence = "session"

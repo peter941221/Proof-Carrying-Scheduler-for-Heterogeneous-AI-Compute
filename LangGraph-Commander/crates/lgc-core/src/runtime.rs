@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use chrono::Local;
@@ -10,6 +12,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 #[serde(default)]
 pub struct ActivityEntry {
     pub seq: u64,
+    pub repeat_count: u32,
     pub timestamp: String,
     pub source: String,
     pub level: String,
@@ -57,6 +60,8 @@ pub struct WorkerSnapshot {
     pub last_finished_at: Option<String>,
     pub last_summary: String,
     pub last_error: String,
+    #[serde(default)]
+    pub current_activity: String,
     #[serde(default)]
     pub pending_action: String,
     #[serde(default)]
@@ -159,6 +164,8 @@ pub struct WorkerThreadState {
     pub last_exit_code: Option<i32>,
     pub last_summary: String,
     pub last_error: String,
+    #[serde(default)]
+    pub current_activity: String,
     pub pending_action: String,
     #[serde(default)]
     pub launch_blocked: bool,
@@ -293,7 +300,9 @@ impl CoordinationSnapshot {
     }
 
     pub fn latest_review(&self, worker_name: &str) -> Option<&CoordinationReviewSnapshot> {
-        self.reviews.get(worker_name).and_then(|entries| entries.last())
+        self.reviews
+            .get(worker_name)
+            .and_then(|entries| entries.last())
     }
 
     pub fn latest_review_counts(&self) -> (usize, usize, usize) {
@@ -405,21 +414,13 @@ impl RuntimeLayout {
     where
         T: Serialize,
     {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create {}", parent.display()))?;
-        }
         let content = serde_json::to_string_pretty(value)?;
-        fs::write(path, content).with_context(|| format!("failed to write {}", path.display()))?;
+        write_text_atomically(path, &content)?;
         Ok(())
     }
 
     pub fn write_text(&self, path: &Path, content: &str) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create {}", parent.display()))?;
-        }
-        fs::write(path, content).with_context(|| format!("failed to write {}", path.display()))?;
+        write_text_atomically(path, content)?;
         Ok(())
     }
 
@@ -472,6 +473,59 @@ impl RuntimeLayout {
     }
 }
 
+fn write_text_atomically(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        let temp_path = parent.join(unique_temp_name(path));
+        fs::write(&temp_path, content)
+            .with_context(|| format!("failed to write {}", temp_path.display()))?;
+        for attempt in 0..12 {
+            match fs::rename(&temp_path, path) {
+                Ok(()) => return Ok(()),
+                Err(rename_error) => {
+                    if path.exists() {
+                        match fs::remove_file(path) {
+                            Ok(()) => {
+                                if fs::rename(&temp_path, path).is_ok() {
+                                    return Ok(());
+                                }
+                            }
+                            Err(remove_error) if attempt == 11 => {
+                                return Err(remove_error).with_context(|| {
+                                    format!("failed to replace {}", path.display())
+                                });
+                            }
+                            Err(_) => {}
+                        }
+                    }
+                    if attempt == 11 {
+                        return Err(rename_error)
+                            .with_context(|| format!("failed to replace {}", path.display()));
+                    }
+                    thread::sleep(Duration::from_millis(25));
+                }
+            }
+        }
+        unreachable!();
+    }
+
+    fs::write(path, content).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn unique_temp_name(path: &Path) -> String {
+    let stem = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("runtime");
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_nanos())
+        .unwrap_or_default();
+    format!(".{stem}.{}.{}.tmp", std::process::id(), nonce)
+}
+
 impl StatusSnapshot {
     pub fn render_brief(&self, coordination: Option<&CoordinationSnapshot>) -> String {
         let mut lines = vec![
@@ -490,7 +544,10 @@ impl StatusSnapshot {
                     "not needed".to_string()
                 }
             ),
-            format!("- Handoff audit: {}", fallback_text(&self.last_check_status)),
+            format!(
+                "- Handoff audit: {}",
+                fallback_text(&self.last_check_status)
+            ),
             if self.last_check_warning.trim().is_empty() {
                 "- Audit warning: none".to_string()
             } else {
@@ -511,9 +568,15 @@ impl StatusSnapshot {
                 String::new(),
                 format!("- Plan ID: {}", fallback_text(&coordination.plan_id)),
                 format!("- Approved: {}", coordination.approved),
-                format!("- Planner mode: {}", fallback_text(&coordination.planner_mode)),
+                format!(
+                    "- Planner mode: {}",
+                    fallback_text(&coordination.planner_mode)
+                ),
                 format!("- Open escalations: {}", open_escalations.len()),
-                format!("- Launch blocked workers: {}", coordination.blocked_worker_count()),
+                format!(
+                    "- Launch blocked workers: {}",
+                    coordination.blocked_worker_count()
+                ),
                 format!(
                     "- Latest reviews: approve {} | rework {} | escalate {}",
                     approved_reviews, rework_reviews, escalated_reviews
@@ -522,10 +585,7 @@ impl StatusSnapshot {
             ]);
         }
 
-        lines.extend([
-            "## Workers".to_string(),
-            String::new(),
-        ]);
+        lines.extend(["## Workers".to_string(), String::new()]);
 
         for worker in &self.workers {
             lines.extend([
@@ -536,6 +596,10 @@ impl StatusSnapshot {
                     worker.branch, worker.expected_branch
                 ),
                 format!("- status: {}", worker.status),
+                format!(
+                    "- current activity: {}",
+                    fallback_text(&worker.current_activity)
+                ),
                 format!("- git clean: {}", worker.git_clean),
                 format!("- handoff: {}", worker.handoff_status),
                 format!(

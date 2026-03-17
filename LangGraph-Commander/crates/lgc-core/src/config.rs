@@ -152,7 +152,7 @@ fn default_ui_style() -> String {
 }
 
 fn default_start_gate_commands() -> Vec<String> {
-    vec!["start".to_string()]
+    Vec::new()
 }
 
 fn default_stream_scope() -> String {

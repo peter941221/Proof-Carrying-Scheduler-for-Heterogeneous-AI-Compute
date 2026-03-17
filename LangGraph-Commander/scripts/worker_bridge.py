@@ -14,6 +14,8 @@ sys.path.insert(0, str(APP_DIR))
 
 from langgraph_runtime import LangGraphWorkerRunner, WorkerConfig  # type: ignore
 
+PROGRESS_PREFIX = "__LGC_PROGRESS__"
+
 
 def load_worker(name: str) -> WorkerConfig:
     payload = json.loads((APP_DIR / "workers.json").read_text(encoding="utf-8"))
@@ -32,6 +34,9 @@ def main(argv: list[str]) -> int:
     config = load_worker(worker_name)
 
     def log(message: str) -> None:
+        if message.startswith(PROGRESS_PREFIX):
+            print(message, flush=True)
+            return
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         print(f"{stamp} [{worker_name}] {message}", flush=True)
 

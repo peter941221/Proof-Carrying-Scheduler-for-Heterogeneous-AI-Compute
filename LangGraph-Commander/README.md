@@ -63,13 +63,14 @@ commander report
 
 The default mode runs the Rust Ratatui dashboard in the current terminal.
 
-V1.0 monitoring contract:
+Headless-first monitoring contract:
 
-- Peter opens `commander` from the project root first
-- Codex may then issue remote `start ...` commands through the live panel heartbeat
-- if the live panel is not running, `start` fails with a prompt telling Peter to run `commander`
-- `stop` remains available for emergency control
-- closing the panel stops all tracked workers
+- `commander` remains the richest live monitor, but it is no longer required before `start`
+- `commander --stream start <worker>` opens a temporary supervisor session when needed, prints one-line worker progress in the current terminal, and keeps the fleet line focused on the requested worker set
+- `commander --stream intake|approve|review|report` streams coordination subprocess output line-by-line instead of waiting for one final blob
+- if a live panel is already running, `--stream` tails the shared runtime while the remote command executes
+- closing the panel still stops the workers owned by that panel session
+- runtime state files now use atomic replace writes with short retries so headless streaming stays stable under Windows cross-process read/write pressure
 
 Supported commands:
 
@@ -91,6 +92,11 @@ Supported commands:
 - `command <free text>`
 - `version`
 
+Global flags:
+
+- `--stream` prints live activity and fleet updates while the command runs
+- `--require-running` fails fast unless a live shared commander session already exists
+
 ## Panel layout
 
 The TUI is now a denser LazyGit-inspired fixed grid with four persistent quadrants:
@@ -111,6 +117,17 @@ Key controls:
 - `Ctrl+N` / `Ctrl+P` cycle the local active worker without mutating shared supervisor state
 - `F1` prints local panel help, `F2` jumps the local feed to `view all`, `F3` jumps to `view selected`, and `F4` is emergency `stop all`
 - `Esc` twice within 2 seconds exits the panel; session shutdown still stops supervised workers
+
+## Streamed terminal output
+
+When `--stream` is enabled, the CLI keeps the current terminal as the primary realtime surface:
+
+- worker progress prints as compact lines such as `[13:09:10] state | reading TASK.md`
+- plain worker `stdout` now also surfaces as compact live lines, so generic `launch_command` workers can report what they are doing without a custom bridge
+- coordination commands print stage output as it arrives instead of only at the end
+- a `[fleet] ...` line updates when worker status or current activity changes, and targeted `start <worker>` streams keep that snapshot scoped to the requested worker set
+- targeted worker streams suppress raw timestamped bridge telemetry when a clearer progress line already exists, so the terminal stays readable during real runs
+- worker progress is sourced from real LangGraph custom stream events plus worker state updates, not only inferred after the run
 
 ## V1 boundaries
 

@@ -8,9 +8,7 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use lgc_core::runtime::{
-    ActivityEntry, FeedDensity, StreamScope, WorkerSnapshot,
-};
+use lgc_core::runtime::{ActivityEntry, FeedDensity, StreamScope, WorkerSnapshot};
 use lgc_supervisor::{SnapshotBundle, SupervisorSession};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
@@ -524,13 +522,14 @@ fn handle_control_shortcut(
             true
         }
         KeyCode::Char('f') | KeyCode::Char('F') => {
-            let shared_follow = snapshot
-                .control
-                .as_ref()
-                .map(|control| control.follow_tail)
-                .unwrap_or(true);
-            app.feed_follow_override = Some(!shared_follow);
-            execute_supervisor_command(session, app, snapshot, toggle_follow_command(snapshot))?;
+            let follow_enabled = app.feed_follows_tail(snapshot);
+            app.feed_follow_override = Some(!follow_enabled);
+            execute_supervisor_command(
+                session,
+                app,
+                snapshot,
+                toggle_follow_command(follow_enabled),
+            )?;
             true
         }
         KeyCode::Char('n') | KeyCode::Char('N') => {
@@ -1045,13 +1044,19 @@ fn render_worker_map(
         Line::from(vec![
             Span::styled("active gate", label_style()),
             Span::raw(format!(
-                " : {}",
+                " : {} | work {}",
                 active_worker
                     .and_then(|worker| {
                         let pending = worker.pending_action.trim();
                         (!pending.is_empty()).then_some(truncate(pending, 52))
                     })
-                    .unwrap_or_else(|| "none".to_string())
+                    .unwrap_or_else(|| "none".to_string()),
+                active_worker
+                    .and_then(|worker| {
+                        let activity = worker.current_activity.trim();
+                        (!activity.is_empty()).then_some(truncate(activity, 34))
+                    })
+                    .unwrap_or_else(|| "idle".to_string())
             )),
         ]),
         Line::from(vec![
@@ -1104,22 +1109,7 @@ fn render_live_feed(
     app: &mut AppState,
     snapshot: &SnapshotBundle,
 ) {
-    let title = format!(
-        "LIVE OUTPUT :: {} :: {} :: tail {}",
-        app.local_view_label(),
-        density_label(
-            snapshot
-                .control
-                .as_ref()
-                .map(|control| control.density_mode)
-                .unwrap_or(FeedDensity::Standard),
-        ),
-        if app.feed_follows_tail(snapshot) {
-            "on"
-        } else {
-            "off"
-        }
-    );
+    let title = live_feed_title(app, snapshot);
 
     let entries = feed_lines(snapshot, app);
     let inner_height = area.height.saturating_sub(2) as usize;
@@ -1309,7 +1299,10 @@ fn render_coordination_summary(snapshot: &SnapshotBundle) -> String {
         return "No coordination plan loaded.".to_string();
     };
     let mut lines = vec![
-        format!("plan={} approved={}", coordination.plan_id, coordination.approved),
+        format!(
+            "plan={} approved={}",
+            coordination.plan_id, coordination.approved
+        ),
         format!(
             "stages={} open_escalations={} blocked_workers={}",
             coordination.parallel_sets.len(),
@@ -1535,9 +1528,14 @@ fn matches_worker(left: &str, right: &str) -> bool {
 }
 
 fn format_activity(entry: &ActivityEntry, density: FeedDensity) -> String {
+    let repeat_suffix = if entry.repeat_count > 1 {
+        format!(" (x{})", entry.repeat_count)
+    } else {
+        String::new()
+    };
     match density {
         FeedDensity::Realtime => format!(
-            "#{:05} {} [{}:{}] {}",
+            "#{:05} {} [{}:{}] {}{}",
             entry.seq,
             entry.timestamp,
             entry.source,
@@ -1546,10 +1544,11 @@ fn format_activity(entry: &ActivityEntry, density: FeedDensity) -> String {
                 entry.message.as_str()
             } else {
                 entry.full_message.as_str()
-            }
+            },
+            repeat_suffix
         ),
         FeedDensity::Standard => format!(
-            "{} [{}] {}",
+            "{} [{}] {}{}",
             entry.timestamp,
             if entry.worker_name.trim().is_empty() {
                 entry.source.as_str()
@@ -1560,9 +1559,28 @@ fn format_activity(entry: &ActivityEntry, density: FeedDensity) -> String {
                 entry.message.as_str()
             } else {
                 entry.dense_message.as_str()
-            }
+            },
+            repeat_suffix
         ),
     }
+}
+
+fn live_feed_title(app: &AppState, snapshot: &SnapshotBundle) -> String {
+    let follow_enabled = app.feed_follows_tail(snapshot);
+    let paused_marker = if follow_enabled { "LIVE" } else { "PAUSED" };
+    format!(
+        "LIVE OUTPUT :: {} :: {} :: {} :: tail {}",
+        app.local_view_label(),
+        density_label(
+            snapshot
+                .control
+                .as_ref()
+                .map(|control| control.density_mode)
+                .unwrap_or(FeedDensity::Standard),
+        ),
+        paused_marker,
+        if follow_enabled { "on" } else { "off" }
+    )
 }
 
 fn parse_stream_scope(scope: &str, snapshot: &SnapshotBundle) -> Option<StreamScope> {
@@ -1631,13 +1649,8 @@ fn scrollable_len_hint(snapshot: &SnapshotBundle, app: &AppState) -> usize {
     feed_lines(snapshot, app).len()
 }
 
-fn toggle_follow_command(snapshot: &SnapshotBundle) -> &'static str {
-    if snapshot
-        .control
-        .as_ref()
-        .map(|control| control.follow_tail)
-        .unwrap_or(true)
-    {
+fn toggle_follow_command(currently_following: bool) -> &'static str {
+    if currently_following {
         "follow off"
     } else {
         "follow on"
@@ -2067,5 +2080,41 @@ mod tests {
         };
         assert_eq!(worker_model_badge(&worker), "5.4-high");
         assert_eq!(worker_reasoning_badge(&worker), "high");
+    }
+
+    #[test]
+    fn live_feed_title_marks_paused_when_follow_disabled() {
+        let snapshot = sample_snapshot();
+        let mut app = AppState::default();
+        app.feed_follow_override = Some(false);
+
+        let title = live_feed_title(&app, &snapshot);
+
+        assert!(title.contains("PAUSED"));
+        assert!(title.contains("tail off"));
+    }
+
+    #[test]
+    fn repeated_activity_shows_compact_count_suffix() {
+        let rendered = format_activity(
+            &ActivityEntry {
+                timestamp: "2026-03-17 10:00:00".to_string(),
+                source: "patrol".to_string(),
+                message: "handoff audit PASS (exit 0)".to_string(),
+                dense_message: "handoff audit PASS (exit 0)".to_string(),
+                full_message: "handoff audit PASS (exit 0)".to_string(),
+                repeat_count: 4,
+                ..Default::default()
+            },
+            FeedDensity::Standard,
+        );
+
+        assert!(rendered.contains("(x4)"));
+    }
+
+    #[test]
+    fn toggle_follow_command_uses_effective_local_state() {
+        assert_eq!(toggle_follow_command(true), "follow off");
+        assert_eq!(toggle_follow_command(false), "follow on");
     }
 }

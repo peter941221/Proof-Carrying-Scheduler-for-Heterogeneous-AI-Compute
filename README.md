@@ -69,9 +69,10 @@ commander check
 
 Notes:
 
-- `commander` must be started by Peter from the project root before Codex can issue `start <worker>` commands
-- the panel is now the required live monitor and emergency-stop console; closing it stops all running workers
+- `commander` is now optional for monitoring; Codex can run `start <worker>` headlessly when no panel is open
+- `commander --stream start <worker>` and `commander --stream report` stream one-line progress directly in the current terminal
+- the panel remains the richest live monitor and emergency-stop console for sessions it owns
 - default launch opens the Ratatui dashboard inline in the current terminal
-- `status`, `brief`, and `check` also work as one-shot commands when no live dashboard is running
-- `start <worker>` is hard-gated behind a live panel heartbeat and prints a fixed prompt if Peter has not opened `commander` yet
+- `status`, `brief`, `check`, `intake`, `approve`, `review`, `report`, and `start` all work without a live dashboard session
+- streamed runs keep a compact fleet line plus real worker / coordination progress so Peter can judge whether orchestration is actually working
 - `stop <worker>` and `stop all` remain available as emergency controls
