@@ -16,6 +16,7 @@
 - Persist per-worker `current_activity` and bridge LangGraph custom stream progress through the Python worker bridge into the Rust runtime feed.
 - Focus targeted `--stream start <worker>` output on the requested worker set and surface plain worker `stdout` as compact terminal progress lines.
 - Suppress duplicate timestamped bridge telemetry in targeted streams and harden runtime state writes with atomic replace + retry handling for Windows cross-process monitoring.
+- Refresh status snapshots after one-shot audits so `commander check` and `commander status` no longer disagree about activation state.
 
 ## 1.1.0
 

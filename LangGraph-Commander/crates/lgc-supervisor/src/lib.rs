@@ -877,7 +877,7 @@ impl SupervisorInner {
                 format!("audit warning: {warning_text}"),
             );
         }
-        self.persist_runtime_files()?;
+        self.refresh_and_persist()?;
         Ok(message)
     }
 
