@@ -6,12 +6,13 @@
 
 ## Summary
 
-- Added explicit `ClaimCheck.artifact_refs` placeholder guidance so each initial claim family has a stable artifact channel reserved.
-- Kept the contract frozen otherwise; no semantic expansion beyond the coordination-packet deliverable.
+- Added a commander-facing contract changelog template so future frozen-surface changes can be recorded consistently.
+- Linked the contract packet to that template and kept the contract frozen otherwise.
 
 ## Files changed
 
-- `spec/claim-taxonomy.md`
+- `spec/contract-changelog-template.md`
+- `spec/contract-packet.md`
 
 ## Validation run
 
@@ -22,9 +23,8 @@
 
 ## Resolved ambiguities
 
-- `ClaimCheck.artifact_refs` now has a recommended stable placeholder format: `<artifact_type>:<stable_id>`.
-- Every initial claim family now has at least one placeholder artifact reference channel reserved (`model`, `log`, or `report`) so downstream modules can attach artifacts consistently.
-- Placeholder refs are explicitly non-evidentiary and do not justify raising `ClaimStatus`.
+- The contract packet now points to a single place for recording future commander-reviewed contract changes.
+- The changelog template now requires change scope, wire impact, downstream impact, validation, and migration notes in one consistent entry shape.
 
 ## Risks / follow-ups
 

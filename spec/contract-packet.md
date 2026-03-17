@@ -29,3 +29,7 @@ The first freeze establishes:
 - snapshot version plus snapshot/model/policy/solver-config hash references
 - deterministic score and constraint witness payloads
 - verifier input/output contracts and claim status vocabulary that remain stable while modules iterate
+
+## Change control record
+
+Future commander-reviewed contract changes should be recorded in `spec/contract-changelog-template.md` using one entry per contract decision.

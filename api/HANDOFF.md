@@ -8,7 +8,7 @@
 
 - Tightened verifier-facing protobuf comments around fallback semantics, counterfactual interpretation, bundle hashing, signer-policy lookup, and verification result booleans.
 - Kept the wire surface frozen: no field renames, enum changes, or new fields.
-- Revalidated the frozen protobuf surface in this round while the spec added missing claim artifact placeholder guidance.
+- Revalidated the frozen protobuf surface while the spec completed the contract changelog template deliverable.
 
 ## Files changed
 
